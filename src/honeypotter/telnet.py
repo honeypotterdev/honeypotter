@@ -4,30 +4,30 @@ from enum import Enum, IntEnum, auto
 from typing import Any
 
 from honeypotter.core import Context, Layer
-from honeypotter.transport import BytesEvent, ConnectionMadeEvent
+from honeypotter.transport import ConnectionMadeEvent, DataEvent
 
 _logger = logging.getLogger(__name__)
 
 
-@dataclass(kw_only=True)
-class ApplicationDataEvent:
-    data: bytes
-
-
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class CommandEvent:
     command: int
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class NegotiationEvent:
     verb: int
     option: int
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class SubnegotiationEvent:
     data: bytes
+
+
+CR = int.from_bytes(b"\r")
+LF = int.from_bytes(b"\n")
+NUL = int.from_bytes(b"\0")
 
 
 class TelnetCode(IntEnum):
@@ -59,9 +59,10 @@ class TelnetCodec(Layer):
         self._app_data_buffer = bytearray()
         self._subnegotiation_buffer = bytearray()
         self._negotiation_verb = 0
+        self._pending_cr = False
 
     def handle_inbound(self, event: Any) -> None:
-        if isinstance(event, BytesEvent):
+        if isinstance(event, DataEvent):
             for byte in event.data:
                 self._handle_state(byte)
 
@@ -69,6 +70,29 @@ class TelnetCodec(Layer):
             return
 
         super().handle_inbound(event)
+
+    def handle_outbound(self, event: Any) -> None:
+        if isinstance(event, DataEvent):
+            self.ctx.send_outbound(DataEvent(data=self._encode_application_data(event.data)))
+            return
+
+        if isinstance(event, CommandEvent):
+            self.ctx.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, event.command])))
+            return
+
+        if isinstance(event, NegotiationEvent):
+            self.ctx.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, event.verb, event.option])))
+            return
+
+        if isinstance(event, SubnegotiationEvent):
+            self.ctx.send_outbound(
+                DataEvent(
+                    data=bytes([TelnetCode.IAC, TelnetCode.SB]) + event.data + bytes([TelnetCode.IAC, TelnetCode.SE])
+                )
+            )
+            return
+
+        super().handle_outbound(event)
 
     def _set_state(self, state: TelnetCodecState) -> None:
         self._state = state
@@ -102,12 +126,29 @@ class TelnetCodec(Layer):
         raise RuntimeError(f"Unknown state: {self._state!r}")
 
     def _handle_data_state(self, byte: int) -> None:
-        if byte != TelnetCode.IAC:
-            self._app_data_buffer.append(byte)
+        if byte == TelnetCode.IAC:
+            self._flush_app_data()
+            self._set_state(TelnetCodecState.IAC)
             return
 
-        self._flush_app_data()
-        self._set_state(TelnetCodecState.IAC)
+        if self._pending_cr:
+            self._pending_cr = False
+
+            if byte == LF:
+                self._app_data_buffer.append(LF)
+                return
+
+            if byte == NUL:
+                self._app_data_buffer.append(CR)
+                return
+
+            self._app_data_buffer.append(CR)
+
+        if byte == CR:
+            self._pending_cr = True
+            return
+
+        self._app_data_buffer.append(byte)
 
     def _handle_iac_state(self, byte: int) -> None:
         if byte == TelnetCode.IAC:
@@ -155,7 +196,7 @@ class TelnetCodec(Layer):
         self._set_state(TelnetCodecState.APPLICATION_DATA)
 
     def _application_data_received(self, data: bytes) -> None:
-        self.ctx.send_inbound(ApplicationDataEvent(data=data))
+        self.ctx.send_inbound(DataEvent(data=data))
 
     def _command_received(self, command: int) -> None:
         self.ctx.send_inbound(CommandEvent(command=command))
@@ -166,36 +207,27 @@ class TelnetCodec(Layer):
     def _subnegotiation_received(self, data: bytes) -> None:
         self.ctx.send_inbound(SubnegotiationEvent(data=data))
 
+    def _encode_application_data(self, data: bytes) -> bytes:
+        encoded = bytearray()
 
-class Telnet(Layer):
+        for byte in data:
+            if byte == LF:
+                encoded.extend(b"\r\n")
+            elif byte == CR:
+                encoded.extend(b"\r\x00")
+            elif byte == TelnetCode.IAC:
+                encoded.extend(b"\xff\xff")
+            else:
+                encoded.append(byte)
+
+        return bytes(encoded)
+
+
+class TelnetSession(Layer):
     def handle_inbound(self, event: Any) -> None:
         if isinstance(event, ConnectionMadeEvent):
-            self.ctx.send_outbound(
-                BytesEvent(
-                    data=bytes(
-                        [
-                            TelnetCode.IAC,
-                            TelnetCode.WONT,
-                            TelnetCode.ECHO,
-                            TelnetCode.IAC,
-                            TelnetCode.DONT,
-                            TelnetCode.ECHO,
-                            TelnetCode.IAC,
-                            TelnetCode.WONT,
-                            TelnetCode.SGA,
-                            TelnetCode.IAC,
-                            TelnetCode.DO,
-                            TelnetCode.NAWS,
-                        ]
-                    )
-                )
-            )
+            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.DO, option=TelnetCode.NAWS))
+            super().handle_inbound(event)
             return
 
-        if isinstance(event, ApplicationDataEvent):
-            _logger.debug(f"Application data received: {event!r}")
-            self.ctx.send_outbound(BytesEvent(data=b"Go away!\r\n"))
-            return
-
-        if isinstance(event, SubnegotiationEvent):
-            _logger.debug(f"Subnegotiation received: {event!r}")
+        super().handle_inbound(event)

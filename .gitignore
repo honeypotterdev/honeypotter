@@ -11,3 +11,6 @@ wheels/
 
 # Root dirs
 .idea/
+
+# Root files
+.coverage

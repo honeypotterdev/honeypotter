@@ -1,5 +1,8 @@
+import logging
 from collections.abc import Callable
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 
 class Context:
@@ -16,19 +19,25 @@ class Context:
 
     def send_inbound(self, event: Any) -> None:
         if self.next is None:
-            raise RuntimeError(
-                f"Cannot send inbound event {event!r}: "
-                f"Layer {self.layer.__class__.__name__!r} is at the top of the stack."
+            _logger.debug(
+                f"Cannot send outbound event {event!r}: "
+                f"Layer {self.layer.__class__.__name__!r} is at the bottom of the stack."
             )
+            return
+
+        _logger.debug(f">>> {self.next.layer.__class__.__name__!r}: {event!r}")
 
         self.next.layer.handle_inbound(event)
 
     def send_outbound(self, event: Any) -> None:
         if self.prev is None:
-            raise RuntimeError(
+            _logger.debug(
                 f"Cannot send outbound event {event!r}: "
                 f"Layer {self.layer.__class__.__name__!r} is at the bottom of the stack."
             )
+            return
+
+        _logger.debug(f"<<< {self.prev.layer.__class__.__name__!r}: {event!r}")
 
         self.prev.layer.handle_outbound(event)
 

@@ -18,8 +18,8 @@ class ConnectionLostEvent:
     reason: Exception | None = None
 
 
-@dataclass
-class BytesEvent:
+@dataclass(frozen=True)
+class DataEvent:
     data: bytes
 
 
@@ -34,7 +34,7 @@ class TransportProtocolAdapterLayer(Layer):
         self._transport = transport
 
     def handle_outbound(self, event: Any) -> None:
-        if isinstance(event, BytesEvent):
+        if isinstance(event, DataEvent):
             self._transport.write(event.data)
             return
 
@@ -46,7 +46,7 @@ class TransportProtocolAdapterLayer(Layer):
         self.ctx.send_inbound(ConnectionMadeEvent())
 
     def data_received(self, data: bytes) -> None:
-        self.ctx.send_inbound(BytesEvent(data=data))
+        self.ctx.send_inbound(DataEvent(data=data))
 
     def connection_lost(self, exc: Exception | None) -> None:
         self.ctx.send_inbound(ConnectionLostEvent(reason=exc))
@@ -83,9 +83,7 @@ class TransportProtocol(asyncio.Protocol):
 
 class TransportProtocolFactory:
     def __init__(self, layer_factories: list[type[Layer]]) -> None:
-        _logger.debug("Creating factory...")
         self._factories = layer_factories
 
     def __call__(self) -> TransportProtocol:
-        _logger.debug("Creating protocol...")
         return TransportProtocol(layer_factories=self._factories)
