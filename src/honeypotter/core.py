@@ -20,7 +20,7 @@ class Context:
     def send_inbound(self, event: Any) -> None:
         if self.next is None:
             _logger.debug(
-                f"Cannot send outbound event {event!r}: "
+                f"Cannot send inbound event {event!r}: "
                 f"Layer {self.layer.__class__.__name__!r} is at the bottom of the stack."
             )
             return

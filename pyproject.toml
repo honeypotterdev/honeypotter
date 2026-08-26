@@ -7,7 +7,9 @@ authors = [
     { name = "Vlad Dmitrievich", email = "2tunnels@proton.me" }
 ]
 requires-python = ">=3.14.3"
-dependencies = []
+dependencies = [
+    "click>=8.5.0",
+]
 
 [dependency-groups]
 dev = [
@@ -18,7 +20,7 @@ dev = [
 ]
 
 [project.scripts]
-honeypotter = "honeypotter.cli:main"
+honeypotter = "honeypotter.cli:cli"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

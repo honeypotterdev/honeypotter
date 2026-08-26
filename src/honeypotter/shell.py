@@ -38,10 +38,14 @@ class ShellSession(Layer):
                 self._state = ShellState.OPEN
                 return
 
-            self.ctx.metadata["shell.command"] = event.line
-            self.ctx.send_outbound(DisconnectRequestEvent())
+            if "shell.commands" not in self.ctx.metadata:
+                self.ctx.metadata["shell.commands"] = []
 
-            _logger.debug(f"Context metadata: {self.ctx.metadata}")
+            self.ctx.metadata["shell.commands"].append(event.line)
+
+            _logger.info(f"Context metadata: {self.ctx.metadata}")
+
+            self.ctx.send_outbound(DisconnectRequestEvent())
 
             return
 
