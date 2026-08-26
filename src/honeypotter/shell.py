@@ -10,7 +10,7 @@ _logger = logging.getLogger(__name__)
 
 
 class ShellState(IntEnum):
-    WAITING_FOR_USERNAME = auto()
+    WAITING_FOR_LOGIN = auto()
     WAITING_FOR_PASSWORD = auto()
     OPEN = auto()
 
@@ -18,16 +18,16 @@ class ShellState(IntEnum):
 class ShellSession(Layer):
     def __init__(self, context: Context) -> None:
         super().__init__(context)
-        self._state: ShellState = ShellState.WAITING_FOR_USERNAME
+        self._state: ShellState = ShellState.WAITING_FOR_LOGIN
 
     def handle_inbound(self, event: Any) -> None:
         if isinstance(event, ConnectionMadeEvent):
-            self.ctx.send_outbound(DataEvent(data=b"username: "))
+            self.ctx.send_outbound(DataEvent(data=b"login: "))
             return
 
         if isinstance(event, LineEvent):
-            if self._state == ShellState.WAITING_FOR_USERNAME:
-                self.ctx.metadata["shell.username"] = event.line
+            if self._state == ShellState.WAITING_FOR_LOGIN:
+                self.ctx.metadata["shell.login"] = event.line
                 self.ctx.send_outbound(DataEvent(data=b"password: "))
                 self._state = ShellState.WAITING_FOR_PASSWORD
                 return
