@@ -4,7 +4,7 @@ from enum import Enum, IntEnum, auto
 from typing import Any
 
 from honeypotter.core import Context, Layer
-from honeypotter.transport import ConnectionMadeEvent, DataEvent
+from honeypotter.transport import DataEvent
 
 _logger = logging.getLogger(__name__)
 
@@ -221,13 +221,3 @@ class TelnetCodec(Layer):
                 encoded.append(byte)
 
         return bytes(encoded)
-
-
-class TelnetSession(Layer):
-    def handle_inbound(self, event: Any) -> None:
-        if isinstance(event, ConnectionMadeEvent):
-            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.DO, option=TelnetCode.NAWS))
-            super().handle_inbound(event)
-            return
-
-        super().handle_inbound(event)
