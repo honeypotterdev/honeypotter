@@ -5,7 +5,7 @@ import click
 
 from honeypotter.decoders import LineDecoder
 from honeypotter.shell import ShellSession
-from honeypotter.telnet import TelnetCodec
+from honeypotter.telnet import TelnetCodec, TelnetSession
 from honeypotter.transport import TransportProtocolFactory
 
 _logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ async def _run(host: str, port: int) -> None:
     _logger.info("Starting server on %s:%s", host, port)
 
     server = await loop.create_server(
-        TransportProtocolFactory([TelnetCodec, LineDecoder, ShellSession]), host=host, port=port
+        TransportProtocolFactory([TelnetCodec, TelnetSession, LineDecoder, ShellSession]), host=host, port=port
     )
 
     async with server:
