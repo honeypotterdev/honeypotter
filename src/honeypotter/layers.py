@@ -8,7 +8,7 @@ from honeypotter.transport import ConnectionLostEvent, DataEvent, DisconnectRequ
 _logger = logging.getLogger(__name__)
 
 
-class TimeoutLayer(Layer):
+class InboundIdleTimeoutLayer(Layer):
     def __init__(self, context: Context, timeout: float = 5) -> None:
         super().__init__(context)
         self._timeout = timeout
@@ -36,28 +36,28 @@ class TimeoutLayer(Layer):
         self.ctx.send_outbound(DisconnectRequestEvent())
 
 
-class LoggingLayer(Layer):
+class TrafficLoggingLayer(Layer):
     def __init__(self, context: Context) -> None:
         super().__init__(context)
-        self._conversation: list[tuple[str, bytes]] = []
+        self._traffic: list[tuple[str, bytes]] = []
 
     def handle_inbound(self, event: Any) -> None:
         if isinstance(event, ConnectionLostEvent):
             _logger.debug(
                 "Connection lost. Conversation: %s, metadata: %s",
-                repr(self._conversation),
+                repr(self._traffic),
                 repr(self.ctx.metadata),
             )
             super().handle_inbound(event)
             return
 
         if isinstance(event, DataEvent):
-            self._conversation.append(("inbound", event.data))
+            self._traffic.append(("inbound", event.data))
 
         super().handle_inbound(event)
 
     def handle_outbound(self, event: Any) -> None:
         if isinstance(event, DataEvent):
-            self._conversation.append(("outbound", event.data))
+            self._traffic.append(("outbound", event.data))
 
         super().handle_outbound(event)
