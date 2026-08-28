@@ -42,11 +42,7 @@ class ShellSession(Layer):
                 self.ctx.metadata["shell"]["commands"] = []
 
             self.ctx.metadata["shell"]["commands"].append(event.line.decode("utf-8", errors="ignore"))
-
-            _logger.info(f"Context metadata: {self.ctx.metadata}")
-
             self.ctx.send_outbound(DisconnectRequestEvent())
-
             return
 
         super().handle_inbound(event)

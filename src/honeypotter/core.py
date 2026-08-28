@@ -10,38 +10,34 @@ _logger = logging.getLogger(__name__)
 class Context:
     layer: Layer
 
-    def __init__(self, stack: Channel):
-        self.stack = stack
+    def __init__(self, channel: Channel):
+        self.channel = channel
         self.prev: Context | None = None
         self.next: Context | None = None
 
     @property
-    def metadata(self) -> dict[str, Any]:
-        return self.stack.metadata
+    def metadata(self) -> MetadataContainer:
+        return self.channel.metadata
 
     def send_inbound(self, event: Any) -> None:
         if self.next is None:
             _logger.debug(
-                "Layer %s is at the top of the stack, dropping inbound event %s",
+                "Layer %s is at the top of the channel, dropping inbound event %s",
                 repr(self.layer.__class__.__name__),
                 repr(event),
             )
             return
-
-        _logger.debug(f"--> {self.next.layer.__class__.__name__!r}: {event!r}")
 
         self.next.layer.handle_inbound(event)
 
     def send_outbound(self, event: Any) -> None:
         if self.prev is None:
             _logger.debug(
-                "Layer %s is at the bottom of the stack, outbound inbound event %s",
+                "Layer %s is at the bottom of the channel, outbound inbound event %s",
                 repr(self.layer.__class__.__name__),
                 repr(event),
             )
             return
-
-        _logger.debug(f"<-- {self.prev.layer.__class__.__name__!r}: {event!r}")
 
         self.prev.layer.handle_outbound(event)
 
