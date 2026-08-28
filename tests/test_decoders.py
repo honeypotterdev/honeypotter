@@ -5,7 +5,16 @@ from honeypotter.decoders import LineDecoder, LineEvent
 from honeypotter.transport import DataEvent
 
 
-def test_line_decoder() -> None:
+def test_line_decoder_cr() -> None:
+    context = Mock(spec=Context)
+
+    layer = LineDecoder(context)
+    layer.handle_inbound(DataEvent(data=b"foo\rbar\r"))
+
+    assert context.send_inbound.call_args_list == [call(LineEvent(line=b"foo")), call(LineEvent(line=b"bar"))]
+
+
+def test_line_decoder_lf() -> None:
     context = Mock(spec=Context)
 
     layer = LineDecoder(context)
