@@ -20,24 +20,26 @@ class Context:
     def send_inbound(self, event: Any) -> None:
         if self.next is None:
             _logger.debug(
-                f"Cannot send inbound event {event!r}: "
-                f"Layer {self.layer.__class__.__name__!r} is at the bottom of the stack."
+                "Layer %s is at the top of the stack, dropping inbound event %s",
+                repr(self.layer.__class__.__name__),
+                repr(event),
             )
             return
 
-        _logger.debug(f">>> {self.next.layer.__class__.__name__!r}: {event!r}")
+        _logger.debug(f"--> {self.next.layer.__class__.__name__!r}: {event!r}")
 
         self.next.layer.handle_inbound(event)
 
     def send_outbound(self, event: Any) -> None:
         if self.prev is None:
             _logger.debug(
-                f"Cannot send outbound event {event!r}: "
-                f"Layer {self.layer.__class__.__name__!r} is at the bottom of the stack."
+                "Layer %s is at the bottom of the stack, outbound inbound event %s",
+                repr(self.layer.__class__.__name__),
+                repr(event),
             )
             return
 
-        _logger.debug(f"<<< {self.prev.layer.__class__.__name__!r}: {event!r}")
+        _logger.debug(f"<-- {self.prev.layer.__class__.__name__!r}: {event!r}")
 
         self.prev.layer.handle_outbound(event)
 
