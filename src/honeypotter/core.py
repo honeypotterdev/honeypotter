@@ -2,6 +2,8 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
+from honeypotter.utils import MetadataContainer
+
 _logger = logging.getLogger(__name__)
 
 
@@ -46,7 +48,7 @@ class Context:
 
 class Channel:
     def __init__(self) -> None:
-        self.metadata: dict[str, Any] = {}
+        self.metadata = MetadataContainer()
         self.tail: Context | None = None
 
     def add[T: Layer](self, layer_factory: Callable[[Context], T]) -> T:

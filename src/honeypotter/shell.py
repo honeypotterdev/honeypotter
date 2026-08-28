@@ -27,21 +27,21 @@ class ShellSession(Layer):
 
         if isinstance(event, LineEvent):
             if self._state == ShellState.WAITING_FOR_LOGIN:
-                self.ctx.metadata["shell.login"] = event.line
+                self.ctx.metadata["shell"]["login"] = event.line.decode("utf-8", errors="ignore")
                 self.ctx.send_outbound(DataEvent(data=b"password: "))
                 self._state = ShellState.WAITING_FOR_PASSWORD
                 return
 
             if self._state == ShellState.WAITING_FOR_PASSWORD:
-                self.ctx.metadata["shell.password"] = event.line
+                self.ctx.metadata["shell"]["password"] = event.line.decode("utf-8", errors="ignore")
                 self.ctx.send_outbound(DataEvent(data=b"/ # "))
                 self._state = ShellState.OPEN
                 return
 
-            if "shell.commands" not in self.ctx.metadata:
-                self.ctx.metadata["shell.commands"] = []
+            if "commands" not in self.ctx.metadata["shell"]:
+                self.ctx.metadata["shell"]["commands"] = []
 
-            self.ctx.metadata["shell.commands"].append(event.line)
+            self.ctx.metadata["shell"]["commands"].append(event.line.decode("utf-8", errors="ignore"))
 
             _logger.info(f"Context metadata: {self.ctx.metadata}")
 
