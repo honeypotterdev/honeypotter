@@ -44,7 +44,7 @@ class TrafficLoggingLayer(Layer):
     def handle_inbound(self, event: Any) -> None:
         if isinstance(event, ConnectionLostEvent):
             _logger.debug(
-                "Connection lost. Conversation: %s, metadata: %s",
+                "Connection lost. Traffic: %s, metadata: %s",
                 repr(self._traffic),
                 repr(self.ctx.metadata),
             )
