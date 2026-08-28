@@ -4,6 +4,7 @@ from typing import Any
 from honeypotter.core import Context, Layer
 from honeypotter.transport import DataEvent
 
+CR = int.from_bytes(b"\r")
 LF = int.from_bytes(b"\n")
 
 
@@ -23,7 +24,7 @@ class LineDecoder(Layer):
             return
 
         for byte in event.data:
-            if byte != LF:
+            if byte not in (CR, LF):
                 self._buffer.append(byte)
                 continue
 
