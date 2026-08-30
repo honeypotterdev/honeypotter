@@ -1,8 +1,14 @@
 from unittest.mock import Mock, call
 
 from honeypotter.core import Context
-from honeypotter.telnet import CommandEvent, TelnetCodec
+from honeypotter.telnet import CommandEvent, TelnetCode, TelnetCodec
 from honeypotter.transport import DataEvent
+
+
+def test_telnet_code_unknown() -> None:
+    assert TelnetCode(99) == 99
+    assert TelnetCode(99) is TelnetCode(99)
+    assert repr(TelnetCode(99)) == "<TelnetCode.UNKNOWN_99: 99>"
 
 
 def test_telnet_codec_data_event() -> None:

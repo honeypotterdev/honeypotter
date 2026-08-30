@@ -9,27 +9,6 @@ from honeypotter.transport import ConnectionMadeEvent, DataEvent
 _logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True, kw_only=True)
-class CommandEvent:
-    command: int
-
-
-@dataclass(frozen=True, kw_only=True)
-class NegotiationEvent:
-    verb: int
-    option: int
-
-
-@dataclass(frozen=True, kw_only=True)
-class SubnegotiationEvent:
-    data: bytes
-
-
-CR = int.from_bytes(b"\r")
-LF = int.from_bytes(b"\n")
-NUL = int.from_bytes(b"\0")
-
-
 class TelnetCode(IntEnum):
     ECHO = 1
     SGA = 3
@@ -41,6 +20,39 @@ class TelnetCode(IntEnum):
     DO = 253
     DONT = 254
     IAC = 255
+
+    @classmethod
+    def _missing_(cls, value: object) -> int | None:
+        if not isinstance(value, int) or not 0 <= value <= 255:
+            return None
+
+        pseudo_member = int.__new__(cls, value)
+        pseudo_member._value_ = value
+        pseudo_member._name_ = f"UNKNOWN_{value}"
+        cls._value2member_map_[value] = pseudo_member
+
+        return pseudo_member
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommandEvent:
+    command: TelnetCode
+
+
+@dataclass(frozen=True, kw_only=True)
+class NegotiationEvent:
+    verb: TelnetCode
+    option: TelnetCode
+
+
+@dataclass(frozen=True, kw_only=True)
+class SubnegotiationEvent:
+    data: bytes
+
+
+CR = int.from_bytes(b"\r")
+LF = int.from_bytes(b"\n")
+NUL = int.from_bytes(b"\0")
 
 
 class TelnetCodecState(Enum):
@@ -199,10 +211,10 @@ class TelnetCodec(Layer):
         self.ctx.send_inbound(DataEvent(data=data))
 
     def _command_received(self, command: int) -> None:
-        self.ctx.send_inbound(CommandEvent(command=command))
+        self.ctx.send_inbound(CommandEvent(command=TelnetCode(command)))
 
     def _negotiation_received(self, verb: int, option: int) -> None:
-        self.ctx.send_inbound(NegotiationEvent(verb=verb, option=option))
+        self.ctx.send_inbound(NegotiationEvent(verb=TelnetCode(verb), option=TelnetCode(option)))
 
     def _subnegotiation_received(self, data: bytes) -> None:
         self.ctx.send_inbound(SubnegotiationEvent(data=data))
@@ -226,9 +238,9 @@ class TelnetCodec(Layer):
 class TelnetSession(Layer):
     def handle_inbound(self, event: Any) -> None:
         if isinstance(event, ConnectionMadeEvent):
-            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.DO, option=TelnetCode.SGA))
+            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.WILL, option=TelnetCode.ECHO))
             self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.WILL, option=TelnetCode.SGA))
-            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.WONT, option=TelnetCode.ECHO))
+            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.DO, option=TelnetCode.SGA))
             super().handle_inbound(event)
             return
 
