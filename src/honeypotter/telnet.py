@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from typing import Any
 
+from honeypotter.constants import CR, LF, NUL
 from honeypotter.core import Context, Layer
 from honeypotter.transport import ConnectionMadeEvent, DataEvent
 
@@ -10,6 +11,7 @@ _logger = logging.getLogger(__name__)
 
 
 class TelnetCode(IntEnum):
+    BINARY_TRANSMISSION = 0
     ECHO = 1
     SGA = 3
     NAWS = 31
@@ -50,9 +52,115 @@ class SubnegotiationEvent:
     data: bytes
 
 
-CR = int.from_bytes(b"\r")
-LF = int.from_bytes(b"\n")
-NUL = int.from_bytes(b"\0")
+class OptionNegotiationState(Enum):
+    NO = auto()
+    YES = auto()
+    WANT_NO_EMPTY = auto()
+    WANT_NO_OPPOSITE = auto()
+    WANT_YES_EMPTY = auto()
+    WANT_YES_OPPOSITE = auto()
+
+
+class OptionNegotiationAction(Enum):
+    SEND_ENABLE = auto()
+    SEND_DISABLE = auto()
+
+
+class OptionNegotiator:
+    def __init__(self) -> None:
+        self._state_table: dict[int, OptionNegotiationState] = {}
+
+    def is_enabled(self, option: int) -> bool:
+        return self._get_state(option) is OptionNegotiationState.YES
+
+    def request_enable(self, option: int) -> OptionNegotiationAction | None:
+        state = self._get_state(option)
+
+        if state is OptionNegotiationState.NO:
+            self._set_state(option, OptionNegotiationState.WANT_YES_EMPTY)
+            return OptionNegotiationAction.SEND_ENABLE
+
+        if state is OptionNegotiationState.WANT_NO_EMPTY:
+            self._set_state(option, OptionNegotiationState.WANT_NO_OPPOSITE)
+            return None
+
+        if state is OptionNegotiationState.WANT_YES_OPPOSITE:
+            self._set_state(option, OptionNegotiationState.WANT_YES_EMPTY)
+            return None
+
+        return None
+
+    def request_disable(self, option: int) -> OptionNegotiationAction | None:
+        state = self._get_state(option)
+
+        if state is OptionNegotiationState.YES:
+            self._set_state(option, OptionNegotiationState.WANT_NO_EMPTY)
+            return OptionNegotiationAction.SEND_DISABLE
+
+        if state is OptionNegotiationState.WANT_NO_OPPOSITE:
+            self._set_state(option, OptionNegotiationState.WANT_NO_EMPTY)
+            return None
+
+        if state is OptionNegotiationState.WANT_YES_EMPTY:
+            self._set_state(option, OptionNegotiationState.WANT_YES_OPPOSITE)
+            return None
+
+        return None
+
+    def receive_enable(self, option: int, *, accept: bool) -> OptionNegotiationAction | None:
+        state = self._get_state(option)
+
+        if state is OptionNegotiationState.NO:
+            if not accept:
+                return OptionNegotiationAction.SEND_DISABLE
+
+            self._set_state(option, OptionNegotiationState.YES)
+            return OptionNegotiationAction.SEND_ENABLE
+
+        if state is OptionNegotiationState.WANT_NO_EMPTY:
+            self._set_state(option, OptionNegotiationState.NO)
+            return None
+
+        if state is OptionNegotiationState.WANT_NO_OPPOSITE or state is OptionNegotiationState.WANT_YES_EMPTY:
+            self._set_state(option, OptionNegotiationState.YES)
+            return None
+
+        if state is OptionNegotiationState.WANT_YES_OPPOSITE:
+            self._set_state(option, OptionNegotiationState.WANT_NO_EMPTY)
+            return OptionNegotiationAction.SEND_DISABLE
+
+        return None
+
+    def receive_disable(self, option: int) -> OptionNegotiationAction | None:
+        state = self._get_state(option)
+
+        if state is OptionNegotiationState.YES:
+            self._set_state(option, OptionNegotiationState.NO)
+            return OptionNegotiationAction.SEND_DISABLE
+
+        if state is OptionNegotiationState.WANT_NO_EMPTY:
+            self._set_state(option, OptionNegotiationState.NO)
+            return None
+
+        if state is OptionNegotiationState.WANT_NO_OPPOSITE:
+            self._set_state(option, OptionNegotiationState.WANT_YES_EMPTY)
+            return OptionNegotiationAction.SEND_ENABLE
+
+        if state in (OptionNegotiationState.WANT_YES_EMPTY, OptionNegotiationState.WANT_YES_OPPOSITE):
+            self._set_state(option, OptionNegotiationState.NO)
+            return None
+
+        return None
+
+    def _get_state(self, option: int) -> OptionNegotiationState:
+        return self._state_table.get(option, OptionNegotiationState.NO)
+
+    def _set_state(self, option: int, state: OptionNegotiationState) -> None:
+        if state is OptionNegotiationState.NO:
+            self._state_table.pop(option, None)
+            return
+
+        self._state_table[option] = state
 
 
 class TelnetCodecState(Enum):
@@ -67,6 +175,10 @@ class TelnetCodec(Layer):
     def __init__(self, context: Context) -> None:
         super().__init__(context)
 
+        self._local_options = OptionNegotiator()
+        self._peer_options = OptionNegotiator()
+        self._local_supported: set[int] = {TelnetCode.ECHO, TelnetCode.SGA, TelnetCode.BINARY_TRANSMISSION}
+        self._peer_supported: set[int] = {TelnetCode.ECHO, TelnetCode.SGA, TelnetCode.BINARY_TRANSMISSION}
         self._state: TelnetCodecState = TelnetCodecState.APPLICATION_DATA
         self._app_data_buffer = bytearray()
         self._subnegotiation_buffer = bytearray()
@@ -93,7 +205,7 @@ class TelnetCodec(Layer):
             return
 
         if isinstance(event, NegotiationEvent):
-            self.ctx.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, event.verb, event.option])))
+            self._request_negotiation(event.verb, event.option)
             return
 
         if isinstance(event, SubnegotiationEvent):
@@ -214,7 +326,65 @@ class TelnetCodec(Layer):
         self.ctx.send_inbound(CommandEvent(command=TelnetCode(command)))
 
     def _negotiation_received(self, verb: int, option: int) -> None:
-        self.ctx.send_inbound(NegotiationEvent(verb=TelnetCode(verb), option=TelnetCode(option)))
+        if verb == TelnetCode.WILL:
+            action = self._peer_options.receive_enable(option, accept=option in self._peer_supported)
+            self._send_negotiation_action(action, option, TelnetCode.DO, TelnetCode.DONT)
+            return
+
+        if verb == TelnetCode.WONT:
+            action = self._peer_options.receive_disable(option)
+            self._send_negotiation_action(action, option, TelnetCode.DO, TelnetCode.DONT)
+            return
+
+        if verb == TelnetCode.DO:
+            action = self._local_options.receive_enable(option, accept=option in self._local_supported)
+            self._send_negotiation_action(action, option, TelnetCode.WILL, TelnetCode.WONT)
+            return
+
+        if verb == TelnetCode.DONT:
+            action = self._local_options.receive_disable(option)
+            self._send_negotiation_action(action, option, TelnetCode.WILL, TelnetCode.WONT)
+            return
+
+        raise RuntimeError(f"Unknown negotiation verb: {verb!r}")
+
+    def _request_negotiation(self, verb: TelnetCode, option: TelnetCode) -> None:
+        if verb == TelnetCode.WILL:
+            action = self._local_options.request_enable(option)
+            self._send_negotiation_action(action, option, TelnetCode.WILL, TelnetCode.WONT)
+            return
+
+        if verb == TelnetCode.WONT:
+            action = self._local_options.request_disable(option)
+            self._send_negotiation_action(action, option, TelnetCode.WILL, TelnetCode.WONT)
+            return
+
+        if verb == TelnetCode.DO:
+            action = self._peer_options.request_enable(option)
+            self._send_negotiation_action(action, option, TelnetCode.DO, TelnetCode.DONT)
+            return
+
+        if verb == TelnetCode.DONT:
+            action = self._peer_options.request_disable(option)
+            self._send_negotiation_action(action, option, TelnetCode.DO, TelnetCode.DONT)
+            return
+
+        raise ValueError(f"Unknown negotiation verb: {verb!r}")
+
+    def _send_negotiation_action(
+        self,
+        action: OptionNegotiationAction | None,
+        option: int,
+        enable_verb: TelnetCode,
+        disable_verb: TelnetCode,
+    ) -> None:
+        if action is OptionNegotiationAction.SEND_ENABLE:
+            self._send_negotiation(enable_verb, option)
+        elif action is OptionNegotiationAction.SEND_DISABLE:
+            self._send_negotiation(disable_verb, option)
+
+    def _send_negotiation(self, verb: TelnetCode, option: int) -> None:
+        self.ctx.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, verb, option])))
 
     def _subnegotiation_received(self, data: bytes) -> None:
         self.ctx.send_inbound(SubnegotiationEvent(data=data))

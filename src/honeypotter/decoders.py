@@ -1,11 +1,9 @@
 from dataclasses import dataclass
 from typing import Any
 
+from honeypotter.constants import CR, LF
 from honeypotter.core import Context, Layer
 from honeypotter.transport import DataEvent
-
-CR = int.from_bytes(b"\r")
-LF = int.from_bytes(b"\n")
 
 
 @dataclass(frozen=True)
