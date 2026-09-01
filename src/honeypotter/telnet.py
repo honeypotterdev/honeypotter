@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from typing import Any
@@ -52,115 +53,93 @@ class SubnegotiationEvent:
     data: bytes
 
 
-class OptionNegotiationState(Enum):
-    NO = auto()
-    YES = auto()
-    WANT_NO_EMPTY = auto()
-    WANT_NO_OPPOSITE = auto()
-    WANT_YES_EMPTY = auto()
-    WANT_YES_OPPOSITE = auto()
-
-
-class OptionNegotiationAction(Enum):
+class OptionAction(Enum):
     SEND_ENABLE = auto()
     SEND_DISABLE = auto()
 
 
+class OptionState(Enum):
+    NO = auto()
+    YES = auto()
+    WANTNO_EMPTY = auto()
+    WANTNO_OPPOSITE = auto()
+    WANTYES_EMPTY = auto()
+    WANTYES_OPPOSITE = auto()
+
+
+class OptionInput(Enum):
+    REQUEST_ENABLE = auto()
+    REQUEST_DISABLE = auto()
+    RECEIVE_ENABLE_ACCEPT = auto()
+    RECEIVE_ENABLE_REJECT = auto()
+    RECEIVE_DISABLE = auto()
+
+
+_TRANSITIONS: dict[tuple[OptionState, OptionInput], tuple[OptionState, OptionAction | None]] = {
+    # NO
+    (OptionState.NO, OptionInput.REQUEST_ENABLE): (OptionState.WANTYES_EMPTY, OptionAction.SEND_ENABLE),
+    (OptionState.NO, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.YES, OptionAction.SEND_ENABLE),
+    (OptionState.NO, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.NO, OptionAction.SEND_DISABLE),
+    # YES
+    (OptionState.YES, OptionInput.REQUEST_DISABLE): (OptionState.WANTNO_EMPTY, OptionAction.SEND_DISABLE),
+    (OptionState.YES, OptionInput.RECEIVE_DISABLE): (OptionState.NO, OptionAction.SEND_DISABLE),
+    # WANTNO_EMPTY
+    (OptionState.WANTNO_EMPTY, OptionInput.REQUEST_ENABLE): (OptionState.WANTNO_OPPOSITE, None),
+    (OptionState.WANTNO_EMPTY, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.NO, None),
+    (OptionState.WANTNO_EMPTY, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.NO, None),
+    (OptionState.WANTNO_EMPTY, OptionInput.RECEIVE_DISABLE): (OptionState.NO, None),
+    # WANTNO_OPPOSITE
+    (OptionState.WANTNO_OPPOSITE, OptionInput.REQUEST_DISABLE): (OptionState.WANTNO_EMPTY, None),
+    (OptionState.WANTNO_OPPOSITE, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.YES, None),
+    (OptionState.WANTNO_OPPOSITE, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.YES, None),
+    (OptionState.WANTNO_OPPOSITE, OptionInput.RECEIVE_DISABLE): (OptionState.WANTYES_EMPTY, OptionAction.SEND_ENABLE),
+    # WANTYES_EMPTY
+    (OptionState.WANTYES_EMPTY, OptionInput.REQUEST_DISABLE): (OptionState.WANTYES_OPPOSITE, None),
+    (OptionState.WANTYES_EMPTY, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.YES, None),
+    (OptionState.WANTYES_EMPTY, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.YES, None),
+    (OptionState.WANTYES_EMPTY, OptionInput.RECEIVE_DISABLE): (OptionState.NO, None),
+    # WANTYES_OPPOSITE
+    (OptionState.WANTYES_OPPOSITE, OptionInput.REQUEST_ENABLE): (OptionState.WANTYES_EMPTY, None),
+    (OptionState.WANTYES_OPPOSITE, OptionInput.RECEIVE_ENABLE_ACCEPT): (
+        OptionState.WANTNO_EMPTY,
+        OptionAction.SEND_DISABLE,
+    ),
+    (OptionState.WANTYES_OPPOSITE, OptionInput.RECEIVE_ENABLE_REJECT): (
+        OptionState.WANTNO_EMPTY,
+        OptionAction.SEND_DISABLE,
+    ),
+    (OptionState.WANTYES_OPPOSITE, OptionInput.RECEIVE_DISABLE): (OptionState.NO, None),
+}
+
+
 class OptionNegotiator:
     def __init__(self) -> None:
-        self._state_table: dict[int, OptionNegotiationState] = {}
+        self._options: dict[int, OptionState] = defaultdict[int, OptionState](lambda: OptionState.NO)
 
     def is_enabled(self, option: int) -> bool:
-        return self._get_state(option) is OptionNegotiationState.YES
+        return self._options[option] == OptionState.YES
 
-    def request_enable(self, option: int) -> OptionNegotiationAction | None:
-        state = self._get_state(option)
+    def request_enable(self, option: int) -> OptionAction | None:
+        return self._transition(option, OptionInput.REQUEST_ENABLE)
 
-        if state is OptionNegotiationState.NO:
-            self._set_state(option, OptionNegotiationState.WANT_YES_EMPTY)
-            return OptionNegotiationAction.SEND_ENABLE
+    def request_disable(self, option: int) -> OptionAction | None:
+        return self._transition(option, OptionInput.REQUEST_DISABLE)
 
-        if state is OptionNegotiationState.WANT_NO_EMPTY:
-            self._set_state(option, OptionNegotiationState.WANT_NO_OPPOSITE)
-            return None
+    def receive_enable(self, option: int, *, accept: bool) -> OptionAction | None:
+        return self._transition(
+            option, OptionInput.RECEIVE_ENABLE_ACCEPT if accept else OptionInput.RECEIVE_ENABLE_REJECT
+        )
 
-        if state is OptionNegotiationState.WANT_YES_OPPOSITE:
-            self._set_state(option, OptionNegotiationState.WANT_YES_EMPTY)
-            return None
+    def receive_disable(self, option: int) -> OptionAction | None:
+        return self._transition(option, OptionInput.RECEIVE_DISABLE)
 
-        return None
+    def _transition(self, option: int, event: OptionInput) -> OptionAction | None:
+        current_state = self._options[option]
 
-    def request_disable(self, option: int) -> OptionNegotiationAction | None:
-        state = self._get_state(option)
+        next_state, action = _TRANSITIONS.get((current_state, event), (current_state, None))
+        self._options[option] = next_state
 
-        if state is OptionNegotiationState.YES:
-            self._set_state(option, OptionNegotiationState.WANT_NO_EMPTY)
-            return OptionNegotiationAction.SEND_DISABLE
-
-        if state is OptionNegotiationState.WANT_NO_OPPOSITE:
-            self._set_state(option, OptionNegotiationState.WANT_NO_EMPTY)
-            return None
-
-        if state is OptionNegotiationState.WANT_YES_EMPTY:
-            self._set_state(option, OptionNegotiationState.WANT_YES_OPPOSITE)
-            return None
-
-        return None
-
-    def receive_enable(self, option: int, *, accept: bool) -> OptionNegotiationAction | None:
-        state = self._get_state(option)
-
-        if state is OptionNegotiationState.NO:
-            if not accept:
-                return OptionNegotiationAction.SEND_DISABLE
-
-            self._set_state(option, OptionNegotiationState.YES)
-            return OptionNegotiationAction.SEND_ENABLE
-
-        if state is OptionNegotiationState.WANT_NO_EMPTY:
-            self._set_state(option, OptionNegotiationState.NO)
-            return None
-
-        if state is OptionNegotiationState.WANT_NO_OPPOSITE or state is OptionNegotiationState.WANT_YES_EMPTY:
-            self._set_state(option, OptionNegotiationState.YES)
-            return None
-
-        if state is OptionNegotiationState.WANT_YES_OPPOSITE:
-            self._set_state(option, OptionNegotiationState.WANT_NO_EMPTY)
-            return OptionNegotiationAction.SEND_DISABLE
-
-        return None
-
-    def receive_disable(self, option: int) -> OptionNegotiationAction | None:
-        state = self._get_state(option)
-
-        if state is OptionNegotiationState.YES:
-            self._set_state(option, OptionNegotiationState.NO)
-            return OptionNegotiationAction.SEND_DISABLE
-
-        if state is OptionNegotiationState.WANT_NO_EMPTY:
-            self._set_state(option, OptionNegotiationState.NO)
-            return None
-
-        if state is OptionNegotiationState.WANT_NO_OPPOSITE:
-            self._set_state(option, OptionNegotiationState.WANT_YES_EMPTY)
-            return OptionNegotiationAction.SEND_ENABLE
-
-        if state in (OptionNegotiationState.WANT_YES_EMPTY, OptionNegotiationState.WANT_YES_OPPOSITE):
-            self._set_state(option, OptionNegotiationState.NO)
-            return None
-
-        return None
-
-    def _get_state(self, option: int) -> OptionNegotiationState:
-        return self._state_table.get(option, OptionNegotiationState.NO)
-
-    def _set_state(self, option: int, state: OptionNegotiationState) -> None:
-        if state is OptionNegotiationState.NO:
-            self._state_table.pop(option, None)
-            return
-
-        self._state_table[option] = state
+        return action
 
 
 class TelnetCodecState(Enum):
@@ -373,14 +352,14 @@ class TelnetCodec(Layer):
 
     def _send_negotiation_action(
         self,
-        action: OptionNegotiationAction | None,
+        action: OptionAction | None,
         option: int,
         enable_verb: TelnetCode,
         disable_verb: TelnetCode,
     ) -> None:
-        if action is OptionNegotiationAction.SEND_ENABLE:
+        if action is OptionAction.SEND_ENABLE:
             self._send_negotiation(enable_verb, option)
-        elif action is OptionNegotiationAction.SEND_DISABLE:
+        elif action is OptionAction.SEND_DISABLE:
             self._send_negotiation(disable_verb, option)
 
     def _send_negotiation(self, verb: TelnetCode, option: int) -> None:

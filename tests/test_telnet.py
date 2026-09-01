@@ -1,7 +1,13 @@
 from unittest.mock import Mock, call
 
 from honeypotter.core import Context
-from honeypotter.telnet import CommandEvent, OptionNegotiationAction, OptionNegotiator, TelnetCode, TelnetCodec
+from honeypotter.telnet import (
+    CommandEvent,
+    OptionAction,
+    OptionNegotiator,
+    TelnetCode,
+    TelnetCodec,
+)
 from honeypotter.transport import DataEvent
 
 
@@ -20,14 +26,14 @@ class TestOptionNegotiator:
     def test_is_enabled_tracks_options_independently(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.receive_enable(1, accept=True) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.receive_enable(1, accept=True) is OptionAction.SEND_ENABLE
         assert negotiator.is_enabled(1) is True
         assert negotiator.is_enabled(2) is False
 
     def test_request_enable_sends_enable_once(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.request_enable(1) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.request_enable(1) is OptionAction.SEND_ENABLE
         assert negotiator.request_enable(1) is None
         assert negotiator.is_enabled(1) is False
 
@@ -35,7 +41,7 @@ class TestOptionNegotiator:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.request_disable(1) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.request_disable(1) is OptionAction.SEND_DISABLE
         assert negotiator.request_disable(1) is None
         assert negotiator.is_enabled(1) is False
 
@@ -55,7 +61,7 @@ class TestOptionNegotiator:
     def test_peer_accepts_pending_enable(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.request_enable(1) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.request_enable(1) is OptionAction.SEND_ENABLE
         assert negotiator.receive_enable(1, accept=True) is None
         assert negotiator.is_enabled(1) is True
 
@@ -63,14 +69,14 @@ class TestOptionNegotiator:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.request_disable(1) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.request_disable(1) is OptionAction.SEND_DISABLE
         assert negotiator.receive_disable(1) is None
         assert negotiator.is_enabled(1) is False
 
     def test_peer_rejects_pending_enable(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.request_enable(1) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.request_enable(1) is OptionAction.SEND_ENABLE
         assert negotiator.receive_disable(1) is None
         assert negotiator.is_enabled(1) is False
 
@@ -78,27 +84,27 @@ class TestOptionNegotiator:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.request_disable(1) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.request_disable(1) is OptionAction.SEND_DISABLE
         assert negotiator.receive_enable(1, accept=True) is None
         assert negotiator.is_enabled(1) is False
 
     def test_unsolicited_enable_accepted(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.receive_enable(1, accept=True) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.receive_enable(1, accept=True) is OptionAction.SEND_ENABLE
         assert negotiator.is_enabled(1) is True
 
     def test_unsolicited_enable_rejected(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.receive_enable(1, accept=False) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.receive_enable(1, accept=False) is OptionAction.SEND_DISABLE
         assert negotiator.is_enabled(1) is False
 
     def test_unsolicited_disable_acknowledged(self) -> None:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.receive_disable(1) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.receive_disable(1) is OptionAction.SEND_DISABLE
         assert negotiator.is_enabled(1) is False
 
     def test_unsolicited_disable_when_disabled_is_ignored(self) -> None:
@@ -110,17 +116,17 @@ class TestOptionNegotiator:
     def test_duplicate_receive_enable_is_ignored(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.receive_enable(1, accept=True) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.receive_enable(1, accept=True) is OptionAction.SEND_ENABLE
         assert negotiator.receive_enable(1, accept=True) is None
         assert negotiator.is_enabled(1) is True
 
     def test_request_enable_pending_request_disable_queued(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.request_enable(1) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.request_enable(1) is OptionAction.SEND_ENABLE
         assert negotiator.request_disable(1) is None
         assert negotiator.is_enabled(1) is False
-        assert negotiator.receive_enable(1, accept=True) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.receive_enable(1, accept=True) is OptionAction.SEND_DISABLE
         assert negotiator.is_enabled(1) is False
         assert negotiator.receive_disable(1) is None
         assert negotiator.is_enabled(1) is False
@@ -129,10 +135,10 @@ class TestOptionNegotiator:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.request_disable(1) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.request_disable(1) is OptionAction.SEND_DISABLE
         assert negotiator.request_enable(1) is None
         assert negotiator.is_enabled(1) is False
-        assert negotiator.receive_disable(1) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.receive_disable(1) is OptionAction.SEND_ENABLE
         assert negotiator.is_enabled(1) is False
         assert negotiator.receive_enable(1, accept=True) is None
         assert negotiator.is_enabled(1) is True
@@ -140,7 +146,7 @@ class TestOptionNegotiator:
     def test_request_disable_cancelled(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.request_enable(1) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.request_enable(1) is OptionAction.SEND_ENABLE
         assert negotiator.request_disable(1) is None
         assert negotiator.request_enable(1) is None
         assert negotiator.receive_enable(1, accept=True) is None
@@ -150,7 +156,7 @@ class TestOptionNegotiator:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.request_disable(1) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.request_disable(1) is OptionAction.SEND_DISABLE
         assert negotiator.request_enable(1) is None
         assert negotiator.request_disable(1) is None
         assert negotiator.receive_disable(1) is None
@@ -159,7 +165,7 @@ class TestOptionNegotiator:
     def test_peer_rejects_enable_while_disable_is_queued(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.request_enable(1) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.request_enable(1) is OptionAction.SEND_ENABLE
         assert negotiator.request_disable(1) is None
         assert negotiator.receive_disable(1) is None
         assert negotiator.is_enabled(1) is False
@@ -168,13 +174,13 @@ class TestOptionNegotiator:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.request_disable(1) is OptionNegotiationAction.SEND_DISABLE
+        assert negotiator.request_disable(1) is OptionAction.SEND_DISABLE
         assert negotiator.request_enable(1) is None
         assert negotiator.receive_enable(1, accept=True) is None
         assert negotiator.is_enabled(1) is True
 
     def _enable(self, negotiator: OptionNegotiator, option: int) -> None:
-        assert negotiator.receive_enable(option, accept=True) is OptionNegotiationAction.SEND_ENABLE
+        assert negotiator.receive_enable(option, accept=True) is OptionAction.SEND_ENABLE
         assert negotiator.is_enabled(option) is True
 
 
