@@ -2,7 +2,7 @@ import codecs
 import shlex
 from pathlib import Path
 
-_data_dir = Path(__file__).parent.parent.parent / "data"
+_data_dir = Path(__file__).parent.parent / "data"
 _busybox_banner = (_data_dir / "busybox_banner.txt").read_text(encoding="utf-8").strip()
 
 
