@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -55,14 +56,16 @@ class TransportProtocolAdapterLayer(Layer):
 class TransportProtocol(asyncio.Protocol):
     _adapter_layer: TransportProtocolAdapterLayer
 
-    def __init__(self, layer_factories: list[type[Layer]]):
+    def __init__(self, layer_factories: list[Callable[[Context], Layer]]) -> None:
         self._factories = layer_factories
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         assert isinstance(transport, asyncio.Transport)
 
         channel = Channel()
+        channel.metadata["sockname"] = transport.get_extra_info("sockname")
         channel.metadata["peername"] = transport.get_extra_info("peername")
+
         self._adapter_layer = channel.add(lambda ctx: TransportProtocolAdapterLayer(ctx, transport))
 
         for factory in self._factories:
@@ -82,7 +85,7 @@ class TransportProtocol(asyncio.Protocol):
 
 
 class TransportProtocolFactory:
-    def __init__(self, layer_factories: list[type[Layer]]) -> None:
+    def __init__(self, layer_factories: list[Callable[[Context], Layer]]) -> None:
         self._factories = layer_factories
 
     def __call__(self) -> TransportProtocol:

@@ -2,6 +2,7 @@ from collections import UserDict
 from typing import Any
 
 
+# TODO: Delete
 class MetadataContainer(UserDict[str, Any]):
     def __getitem__(self, key: str) -> Any:
         if key not in self.data:
