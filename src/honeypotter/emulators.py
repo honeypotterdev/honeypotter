@@ -18,7 +18,7 @@ class BusyBoxEmulator:
         components = shlex.split(line)
 
         match components:
-            case ["sh", "ash"]:
+            case ["sh", *rest] | ["ash", *rest]:
                 return b"/ # "
             case ["echo", *rest]:
                 return self._handle_echo(rest)

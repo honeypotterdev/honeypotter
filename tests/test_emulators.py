@@ -13,6 +13,12 @@ def test_busybox_unknown_command() -> None:
     assert emulator.execute_line(b"hack") == b"sh: hack: not found\n/ # "
 
 
+def test_busybox_sh() -> None:
+    emulator = BusyBoxEmulator()
+
+    assert emulator.execute_line(b"sh") == b"/ # "
+
+
 def test_busybox_emulator_echo_without_arguments() -> None:
     emulator = BusyBoxEmulator()
 
