@@ -7,6 +7,12 @@ def test_busybox_emulator() -> None:
     assert emulator.execute_line() == b"/ # "
 
 
+def test_busybox_emulator_nul() -> None:
+    emulator = BusyBoxEmulator()
+
+    assert emulator.execute_line(b"sh\x00") == b"/ # "
+
+
 def test_busybox_unknown_command() -> None:
     emulator = BusyBoxEmulator()
 

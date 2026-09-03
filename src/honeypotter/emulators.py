@@ -14,6 +14,7 @@ class BusyBoxEmulator:
         if line is None:
             return b"/ # "
 
+        line = line.replace(b"\x00", b"")
         line = line.decode("utf-8", errors="ignore")
         components = shlex.split(line)
 
