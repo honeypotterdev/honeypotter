@@ -7,7 +7,7 @@ import click
 from honeypotter.core import Context, Layer
 from honeypotter.decoders import LineDecoder
 from honeypotter.exporters import TelnetConnectionExporter
-from honeypotter.layers import InboundIdleTimeoutLayer, TrafficLoggingLayer
+from honeypotter.layers import InboundIdleTimeoutLayer, IpRateLimiter, TrafficLoggingLayer
 from honeypotter.shell import ShellSession
 from honeypotter.telnet import TelnetCodec, TelnetSession
 from honeypotter.transport import TransportProtocolFactory
@@ -33,7 +33,10 @@ async def _run(*, host: str, port: int, backend_api_key: str | None, backend_url
 
     _logger.info("Starting server on %s:%s", host, port)
 
+    ip_rate_limiter = IpRateLimiter()
+
     layer_factories: list[Callable[[Context], Layer]] = [
+        ip_rate_limiter.layer_factory,
         InboundIdleTimeoutLayer,
         TrafficLoggingLayer,
         TelnetCodec,
