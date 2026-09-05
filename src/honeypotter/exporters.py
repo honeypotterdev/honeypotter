@@ -99,19 +99,22 @@ class TelnetConnectionExporterLayer(Layer):
 
     def handle_inbound(self, event: Any) -> None:
         if isinstance(event, ConnectionLostEvent):
-            self._queue.put_nowait(
-                TelnetConnectionDetails(
-                    honeypot_ip=self.ctx.metadata["sockname"][0],
-                    honeypot_port=self.ctx.metadata["sockname"][1],
-                    client_ip=self.ctx.metadata["peername"][0],
-                    client_port=self.ctx.metadata["peername"][1],
-                    username=self.ctx.metadata.get("shell.username"),
-                    password=self.ctx.metadata.get("shell.password"),
-                    shell_inputs=self.ctx.metadata.get("shell.inputs"),
-                    conversation=self._conversation,
-                    created_at=self._created_at,
+            has_inbound_messages = any(message.direction == "inbound" for message in self._conversation)
+
+            if has_inbound_messages:
+                self._queue.put_nowait(
+                    TelnetConnectionDetails(
+                        honeypot_ip=self.ctx.metadata["sockname"][0],
+                        honeypot_port=self.ctx.metadata["sockname"][1],
+                        client_ip=self.ctx.metadata["peername"][0],
+                        client_port=self.ctx.metadata["peername"][1],
+                        username=self.ctx.metadata.get("shell.username"),
+                        password=self.ctx.metadata.get("shell.password"),
+                        shell_inputs=self.ctx.metadata.get("shell.inputs"),
+                        conversation=self._conversation,
+                        created_at=self._created_at,
+                    )
                 )
-            )
 
             super().handle_inbound(event)
             return
