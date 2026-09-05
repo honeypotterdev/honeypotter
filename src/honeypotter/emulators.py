@@ -25,7 +25,7 @@ class BusyBoxEmulator:
         return command_line.replace(b"\x00", b"").decode("utf-8", errors="ignore")
 
     def _split_into_command_list(self, command_line: str) -> list[Command]:
-        lexer = shlex.shlex(command_line, posix=True, punctuation_chars=";")
+        lexer = shlex.shlex(command_line, posix=True, punctuation_chars=";&")
         command_list: list[Command] = [[]]
 
         for token in lexer:
@@ -54,6 +54,8 @@ class BusyBoxEmulator:
                 return self._handle_echo(rest)
             case ["busybox", *rest] | ["/bin/busybox", *rest]:
                 return self._handle_busybox(rest)
+            case ["cd", "/proc", "&&", "cat", "self/cmdline"]:
+                return b"catself/cmdline/proc #"
 
         return self._handle_unknown_command(command[0])
 

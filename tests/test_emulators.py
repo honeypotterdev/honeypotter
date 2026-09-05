@@ -36,6 +36,9 @@ class TestBusyBoxEmulator:
         assert output.startswith(b"BusyBox v1.2.3 (2000-01-02 03:04:05 UTC) multi-call binary")
         assert output.endswith(b"\n/ # ")
 
+    def test_special_case_1(self, emulator: BusyBoxEmulator) -> None:
+        assert emulator.execute_line(b"cd /proc && cat self/cmdline") == b"catself/cmdline/proc #"
+
     def test_busybox_unknown_applet(self, emulator: BusyBoxEmulator) -> None:
         assert emulator.execute_line(b"busybox TEST").startswith(b"TEST: applet not found\n/ # ")
 
