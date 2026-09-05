@@ -38,7 +38,7 @@ class TelnetConnectionExporter:
     def __init__(self, *, api_key: str, url: str) -> None:
         self._client = AsyncClient(headers={"Authorization": f"Bearer {api_key}"})
         self._url = url
-        self._queue = asyncio.Queue()
+        self._queue = asyncio.Queue[TelnetConnectionDetails]()
         self._worker_task = asyncio.create_task(self._worker())
 
     def layer_factory(self, context: Context) -> Layer:

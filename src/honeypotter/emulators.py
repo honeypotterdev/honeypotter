@@ -5,6 +5,8 @@ from pathlib import Path
 _data_dir = Path(__file__).parent / "data"
 _busybox_banner = (_data_dir / "busybox_banner.txt").read_text(encoding="utf-8").strip()
 
+Command = list[str]
+
 
 class BusyBoxEmulator:
     def __init__(self, version: str = "v1.38.0 (2026-05-13 02:21:49 UTC)") -> None:
@@ -14,19 +16,46 @@ class BusyBoxEmulator:
         if line is None:
             return b"/ # "
 
-        line = line.replace(b"\x00", b"")
-        line = line.decode("utf-8", errors="ignore")
-        components = shlex.split(line)
+        command_line = self._normalize_command_line(line)
+        command_list = self._split_into_command_list(command_line)
 
-        match components:
-            case ["sh", *rest] | ["ash", *rest]:
+        return self._handle_command_list(command_list)
+
+    def _normalize_command_line(self, command_line: bytes) -> str:
+        return command_line.replace(b"\x00", b"").decode("utf-8", errors="ignore")
+
+    def _split_into_command_list(self, command_line: str) -> list[Command]:
+        lexer = shlex.shlex(command_line, posix=True, punctuation_chars=";")
+        command_list: list[Command] = [[]]
+
+        for token in lexer:
+            if token == ";":
+                command_list.append([])
+            else:
+                command_list[-1].append(token)
+
+        return command_list
+
+    def _handle_command_list(self, command_list: list[Command]) -> bytes:
+        output = b""
+
+        for command in command_list:
+            output += self._handle_command(command)
+
+        return output
+
+    def _handle_command(self, command: Command) -> bytes:
+        match command:
+            case []:
+                return b"/ # "
+            case ["sh", *_rest] | ["ash", *_rest]:
                 return b"/ # "
             case ["echo", *rest]:
                 return self._handle_echo(rest)
             case ["busybox", *rest] | ["/bin/busybox", *rest]:
                 return self._handle_busybox(rest)
 
-        return self._handle_unknown_command(components[0])
+        return self._handle_unknown_command(command[0])
 
     def _handle_echo(self, arguments: list[str]) -> bytes:
         match arguments:
