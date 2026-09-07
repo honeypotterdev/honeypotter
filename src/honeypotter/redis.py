@@ -1,15 +1,21 @@
 from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum, IntEnum, auto
 from typing import Any
 
 from honeypotter.core import Layer
 from honeypotter.transport import DataEvent
 
 
-class RedisProtocolState(Enum):
+class State(Enum):
     WAIT_FOR_TYPE = auto()
     READ_SIMPLE_STRING = auto()
     WAIT_FOR_LF = auto()
+
+
+class Token(IntEnum):
+    PLUS = ord(b"+")
+    CR = ord(b"\r")
+    LF = ord(b"\n")
 
 
 @dataclass(frozen=True)
@@ -19,26 +25,26 @@ class SimpleStringReceived:
 
 class RedisProtocol:
     def __init__(self) -> None:
-        self._state = RedisProtocolState.WAIT_FOR_TYPE
+        self._state = State.WAIT_FOR_TYPE
         self._buffer = bytearray()
 
     def receive_data(self, data: bytes) -> list[SimpleStringReceived]:
         events = []
 
-        for input in data:
-            match self._state, input:
-                case RedisProtocolState.WAIT_FOR_TYPE, 43:  # "+"
-                    self._state = RedisProtocolState.READ_SIMPLE_STRING
+        for byte in data:
+            match self._state, byte:
+                case State.WAIT_FOR_TYPE, Token.PLUS:
+                    self._state = State.READ_SIMPLE_STRING
 
-                case RedisProtocolState.READ_SIMPLE_STRING, char if char == 13:  # "\r"
-                    self._state = RedisProtocolState.WAIT_FOR_LF
+                case State.READ_SIMPLE_STRING, Token.CR:
+                    self._state = State.WAIT_FOR_LF
 
-                case RedisProtocolState.READ_SIMPLE_STRING, char:
-                    self._state = RedisProtocolState.READ_SIMPLE_STRING
-                    self._buffer.append(char)
+                case State.READ_SIMPLE_STRING, byte:
+                    self._state = State.READ_SIMPLE_STRING
+                    self._buffer.append(byte)
 
-                case RedisProtocolState.WAIT_FOR_LF, char if char == 10:  # "\n"
-                    self._state = RedisProtocolState.WAIT_FOR_TYPE
+                case State.WAIT_FOR_LF, Token.LF:
+                    self._state = State.WAIT_FOR_TYPE
                     events.append(SimpleStringReceived(bytes(self._buffer)))
                     self._buffer.clear()
 
