@@ -1,6 +1,10 @@
 ```mermaid
 ---
 title: TelnetOption
+config:
+  layout: elk
+  elk:
+    considerModelOrder: "NONE"
 ---
 stateDiagram-v2
 [*] --> no
