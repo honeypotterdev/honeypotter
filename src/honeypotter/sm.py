@@ -46,6 +46,15 @@ class StateMachine(ABC):
 
         return None
 
+    def get_mermaid_diagram(self) -> str:
+        title = self.__class__.__name__
+        transitions = [f"[*] --> {self.get_initial_state()}"]
+
+        for rule in self.get_rules():
+            transitions.append(f"{rule.source} --> {rule.target}: {rule.event}")
+
+        return f"---\ntitle: {title}\n---\nstateDiagram-v2\n{'\n'.join(transitions)}"
+
     def _get_transitions(self) -> dict[tuple[Any, Any], list[Rule]]:
         transitions = defaultdict(list)
 
