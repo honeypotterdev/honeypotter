@@ -26,7 +26,7 @@ class TestOptionNegotiator:
     def test_is_enabled_tracks_options_independently(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.receive_enable(1, accept=True) is OptionAction.SEND_ENABLE
+        assert negotiator.receive_enable(1, accept=True) == OptionAction.SEND_ENABLE
         assert negotiator.is_enabled(1) is True
         assert negotiator.is_enabled(2) is False
 
