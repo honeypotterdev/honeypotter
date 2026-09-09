@@ -1,4 +1,8 @@
 ```mermaid
+info
+```
+
+```mermaid
 ---
 title: TelnetOption
 ---
