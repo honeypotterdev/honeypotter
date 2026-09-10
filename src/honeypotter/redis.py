@@ -332,12 +332,8 @@ class RedisSession(Layer):
         match event:
             case Array(array=[BulkString(string=b"PING")]):
                 self.ctx.send_outbound(DataEvent(data=self._protocol.send_simple_string(b"PONG")))
-            case Array(array=[BulkString(string=b"ENABLE"), BulkString(string=b"HACK")]):
-                self.ctx.send_outbound(DataEvent(data=self._protocol.send_simple_error(b"Nope!")))
-            case Array(array=[BulkString(string=b"SET"), BulkString(string=key), BulkString(string=value)]):
-                self.ctx.send_outbound(
-                    DataEvent(data=self._protocol.send_simple_string(key + b" to " + value + b"? Fine, I guess."))
-                )
+            case Array(array=[BulkString(string=b"SET"), BulkString(string=_), BulkString(string=_)]):
+                self.ctx.send_outbound(DataEvent(data=self._protocol.send_simple_string(b"OK")))
             case Array(array=[BulkString(string=command)]):
                 self.ctx.send_outbound(
                     DataEvent(data=self._protocol.send_simple_error(b"ERR unknown command '" + command + b"'"))
