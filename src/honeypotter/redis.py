@@ -4,7 +4,7 @@ from enum import Enum, IntEnum, auto
 from typing import Any, Literal
 
 from honeypotter.core import Context, Layer
-from honeypotter.sm import Rule, StateMachine, UnknownTransitionError
+from honeypotter.statemachine import Rule, StateMachine, UnknownTransitionError
 from honeypotter.transport import DataEvent
 
 _logger = logging.getLogger(__name__)

@@ -6,7 +6,7 @@ from typing import Any
 
 from honeypotter.constants import CR, LF, NUL
 from honeypotter.core import Context, Layer
-from honeypotter.sm import Rule, StateMachine
+from honeypotter.statemachine import Rule, StateMachine
 from honeypotter.transport import ConnectionMadeEvent, DataEvent
 
 _logger = logging.getLogger(__name__)
