@@ -6,6 +6,7 @@ from typing import Any
 
 from honeypotter.constants import CR, LF, NUL
 from honeypotter.core import Context, Layer
+from honeypotter.statemachine import Rule, StateMachine
 from honeypotter.transport import ConnectionMadeEvent, DataEvent
 
 _logger = logging.getLogger(__name__)
@@ -75,71 +76,111 @@ class OptionInput(Enum):
     RECEIVE_DISABLE = auto()
 
 
-_TRANSITIONS: dict[tuple[OptionState, OptionInput], tuple[OptionState, OptionAction | None]] = {
-    # NO
-    (OptionState.NO, OptionInput.REQUEST_ENABLE): (OptionState.WANTYES_EMPTY, OptionAction.SEND_ENABLE),
-    (OptionState.NO, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.YES, OptionAction.SEND_ENABLE),
-    (OptionState.NO, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.NO, OptionAction.SEND_DISABLE),
-    # YES
-    (OptionState.YES, OptionInput.REQUEST_DISABLE): (OptionState.WANTNO_EMPTY, OptionAction.SEND_DISABLE),
-    (OptionState.YES, OptionInput.RECEIVE_DISABLE): (OptionState.NO, OptionAction.SEND_DISABLE),
-    # WANTNO_EMPTY
-    (OptionState.WANTNO_EMPTY, OptionInput.REQUEST_ENABLE): (OptionState.WANTNO_OPPOSITE, None),
-    (OptionState.WANTNO_EMPTY, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.NO, None),
-    (OptionState.WANTNO_EMPTY, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.NO, None),
-    (OptionState.WANTNO_EMPTY, OptionInput.RECEIVE_DISABLE): (OptionState.NO, None),
-    # WANTNO_OPPOSITE
-    (OptionState.WANTNO_OPPOSITE, OptionInput.REQUEST_DISABLE): (OptionState.WANTNO_EMPTY, None),
-    (OptionState.WANTNO_OPPOSITE, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.YES, None),
-    (OptionState.WANTNO_OPPOSITE, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.YES, None),
-    (OptionState.WANTNO_OPPOSITE, OptionInput.RECEIVE_DISABLE): (OptionState.WANTYES_EMPTY, OptionAction.SEND_ENABLE),
-    # WANTYES_EMPTY
-    (OptionState.WANTYES_EMPTY, OptionInput.REQUEST_DISABLE): (OptionState.WANTYES_OPPOSITE, None),
-    (OptionState.WANTYES_EMPTY, OptionInput.RECEIVE_ENABLE_ACCEPT): (OptionState.YES, None),
-    (OptionState.WANTYES_EMPTY, OptionInput.RECEIVE_ENABLE_REJECT): (OptionState.YES, None),
-    (OptionState.WANTYES_EMPTY, OptionInput.RECEIVE_DISABLE): (OptionState.NO, None),
-    # WANTYES_OPPOSITE
-    (OptionState.WANTYES_OPPOSITE, OptionInput.REQUEST_ENABLE): (OptionState.WANTYES_EMPTY, None),
-    (OptionState.WANTYES_OPPOSITE, OptionInput.RECEIVE_ENABLE_ACCEPT): (
-        OptionState.WANTNO_EMPTY,
-        OptionAction.SEND_DISABLE,
-    ),
-    (OptionState.WANTYES_OPPOSITE, OptionInput.RECEIVE_ENABLE_REJECT): (
-        OptionState.WANTNO_EMPTY,
-        OptionAction.SEND_DISABLE,
-    ),
-    (OptionState.WANTYES_OPPOSITE, OptionInput.RECEIVE_DISABLE): (OptionState.NO, None),
-}
+class TelnetOption(StateMachine):
+    def get_initial_state(self) -> OptionState:
+        return OptionState.NO
+
+    def get_rules(self) -> list[Rule]:
+        return [
+            # NO
+            Rule(
+                source=OptionState.NO,
+                event=OptionInput.REQUEST_ENABLE,
+                target=OptionState.WANTYES_EMPTY,
+                action="send_enable",
+            ),
+            Rule(
+                source=OptionState.NO,
+                event=OptionInput.RECEIVE_ENABLE_ACCEPT,
+                target=OptionState.YES,
+                action="send_enable",
+            ),
+            Rule(
+                source=OptionState.NO,
+                event=OptionInput.RECEIVE_ENABLE_REJECT,
+                target=OptionState.NO,
+                action="send_disable",
+            ),
+            # YES
+            Rule(
+                source=OptionState.YES,
+                event=OptionInput.REQUEST_DISABLE,
+                target=OptionState.WANTNO_EMPTY,
+                action="send_disable",
+            ),
+            Rule(
+                source=OptionState.YES, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO, action="send_disable"
+            ),
+            # WANTNO_EMPTY
+            Rule(source=OptionState.WANTNO_EMPTY, event=OptionInput.REQUEST_ENABLE, target=OptionState.WANTNO_OPPOSITE),
+            Rule(source=OptionState.WANTNO_EMPTY, event=OptionInput.RECEIVE_ENABLE_ACCEPT, target=OptionState.NO),
+            Rule(source=OptionState.WANTNO_EMPTY, event=OptionInput.RECEIVE_ENABLE_REJECT, target=OptionState.NO),
+            Rule(source=OptionState.WANTNO_EMPTY, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO),
+            # WANTNO_OPPOSITE
+            Rule(
+                source=OptionState.WANTNO_OPPOSITE, event=OptionInput.REQUEST_DISABLE, target=OptionState.WANTNO_EMPTY
+            ),
+            Rule(source=OptionState.WANTNO_OPPOSITE, event=OptionInput.RECEIVE_ENABLE_ACCEPT, target=OptionState.YES),
+            Rule(source=OptionState.WANTNO_OPPOSITE, event=OptionInput.RECEIVE_ENABLE_REJECT, target=OptionState.YES),
+            Rule(
+                source=OptionState.WANTNO_OPPOSITE,
+                event=OptionInput.RECEIVE_DISABLE,
+                target=OptionState.WANTYES_EMPTY,
+                action="send_enable",
+            ),
+            # WANTYES_EMPTY
+            Rule(
+                source=OptionState.WANTYES_EMPTY, event=OptionInput.REQUEST_DISABLE, target=OptionState.WANTYES_OPPOSITE
+            ),
+            Rule(source=OptionState.WANTYES_EMPTY, event=OptionInput.RECEIVE_ENABLE_ACCEPT, target=OptionState.YES),
+            Rule(source=OptionState.WANTYES_EMPTY, event=OptionInput.RECEIVE_ENABLE_REJECT, target=OptionState.YES),
+            Rule(source=OptionState.WANTYES_EMPTY, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO),
+            # WANTYES_OPPOSITE
+            Rule(
+                source=OptionState.WANTYES_OPPOSITE, event=OptionInput.REQUEST_ENABLE, target=OptionState.WANTYES_EMPTY
+            ),
+            Rule(
+                source=OptionState.WANTYES_OPPOSITE,
+                event=OptionInput.RECEIVE_ENABLE_ACCEPT,
+                target=OptionState.WANTNO_EMPTY,
+                action="send_disable",
+            ),
+            Rule(
+                source=OptionState.WANTYES_OPPOSITE,
+                event=OptionInput.RECEIVE_ENABLE_REJECT,
+                target=OptionState.WANTNO_EMPTY,
+                action="send_disable",
+            ),
+            Rule(source=OptionState.WANTYES_OPPOSITE, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO),
+        ]
+
+    def send_enable(self) -> OptionAction:
+        return OptionAction.SEND_ENABLE
+
+    def send_disable(self) -> OptionAction:
+        return OptionAction.SEND_DISABLE
 
 
 class OptionNegotiator:
     def __init__(self) -> None:
-        self._options: dict[int, OptionState] = defaultdict[int, OptionState](lambda: OptionState.NO)
+        self._options: dict[int, TelnetOption] = defaultdict[int, TelnetOption](lambda: TelnetOption())
 
     def is_enabled(self, option: int) -> bool:
-        return self._options[option] == OptionState.YES
+        return self._options[option].get_current_state() == OptionState.YES
 
     def request_enable(self, option: int) -> OptionAction | None:
-        return self._transition(option, OptionInput.REQUEST_ENABLE)
+        return self._options[option].send(OptionInput.REQUEST_ENABLE)
 
     def request_disable(self, option: int) -> OptionAction | None:
-        return self._transition(option, OptionInput.REQUEST_DISABLE)
+        return self._options[option].send(OptionInput.REQUEST_DISABLE)
 
     def receive_enable(self, option: int, *, accept: bool) -> OptionAction | None:
-        return self._transition(
-            option, OptionInput.RECEIVE_ENABLE_ACCEPT if accept else OptionInput.RECEIVE_ENABLE_REJECT
+        return self._options[option].send(
+            OptionInput.RECEIVE_ENABLE_ACCEPT if accept else OptionInput.RECEIVE_ENABLE_REJECT
         )
 
     def receive_disable(self, option: int) -> OptionAction | None:
-        return self._transition(option, OptionInput.RECEIVE_DISABLE)
-
-    def _transition(self, option: int, event: OptionInput) -> OptionAction | None:
-        current_state = self._options[option]
-
-        next_state, action = _TRANSITIONS.get((current_state, event), (current_state, None))
-        self._options[option] = next_state
-
-        return action
+        return self._options[option].send(OptionInput.RECEIVE_DISABLE)
 
 
 class TelnetCodecState(Enum):
