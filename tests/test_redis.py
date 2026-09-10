@@ -1,6 +1,6 @@
 import pytest
 
-from honeypotter.redis import Array, BulkString, RedisProtocol, RedisProtocolError, SimpleString
+from honeypotter.redis import Array, BulkString, NullBulkString, RedisProtocol, RedisProtocolError, SimpleString
 
 
 class TestRedisProtocol:
@@ -24,6 +24,9 @@ class TestRedisProtocol:
 
     def test_receive_data_bulk_string(self, protocol: RedisProtocol) -> None:
         assert protocol.receive_data(b"$5\r\nhello\r\n") == [BulkString(string=b"hello")]
+
+    def test_receive_data_null_bulk_string(self, protocol: RedisProtocol) -> None:
+        assert protocol.receive_data(b"$-1\r\n") == [NullBulkString()]
 
     def test_receive_data_array(self, protocol: RedisProtocol) -> None:
         assert protocol.receive_data(b"*2\r\n+hello\r\n$5\r\nworld\r\n") == [

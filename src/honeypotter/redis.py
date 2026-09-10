@@ -15,9 +15,12 @@ class State(Enum):
     READ_SIMPLE_STRING = auto()
     WAIT_SIMPLE_STRING_LF = auto()
     READ_BULK_STRING_LENGTH = auto()
-    WAIT_BULK_STRING_BEGIN_LF = auto()
-    WAIT_BULK_STRING_END_LF = auto()
+    WAIT_BULK_STRING_TERMINATOR_LF = auto()
+    WAIT_BULK_STRING_FINAL_LF = auto()
     READ_BULK_STRING = auto()
+    WAIT_NULL_BULK_STRING_ONE = auto()
+    WAIT_NULL_BULK_STRING_CR = auto()
+    WAIT_NULL_BULK_STRING_LF = auto()
     READ_ARRAY_LENGTH = auto()
     WAIT_ARRAY_HEADER_LF = auto()
     ERROR = auto()
@@ -30,7 +33,9 @@ class Token(IntEnum):
     CR = ord(b"\r")
     LF = ord(b"\n")
     ZERO = ord(b"0")
+    ONE = ord(b"1")
     NINE = ord(b"9")
+    MINUS = ord(b"-")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,11 +49,16 @@ class BulkString:
 
 
 @dataclass(frozen=True, kw_only=True)
+class NullBulkString:
+    pass
+
+
+@dataclass(frozen=True, kw_only=True)
 class Array:
     array: list[Event]
 
 
-Event = SimpleString | BulkString | Array
+Event = SimpleString | BulkString | NullBulkString | Array
 
 
 class RedisProtocolParser(StateMachine):
@@ -115,12 +125,18 @@ class RedisProtocolParser(StateMachine):
             Rule(
                 source=State.READ_BULK_STRING_LENGTH,
                 event="byte",
-                target=State.WAIT_BULK_STRING_BEGIN_LF,
+                target=State.WAIT_BULK_STRING_TERMINATOR_LF,
                 condition="is_carriage_return",
                 action="parse_bulk_string_length",
             ),
             Rule(
-                source=State.WAIT_BULK_STRING_BEGIN_LF,
+                source=State.READ_BULK_STRING_LENGTH,
+                event="byte",
+                target=State.WAIT_NULL_BULK_STRING_ONE,
+                condition="is_minus",
+            ),
+            Rule(
+                source=State.WAIT_BULK_STRING_TERMINATOR_LF,
                 event="byte",
                 target=State.READ_BULK_STRING,
                 condition="is_line_feed",
@@ -135,15 +151,34 @@ class RedisProtocolParser(StateMachine):
             Rule(
                 source=State.READ_BULK_STRING,
                 event="byte",
-                target=State.WAIT_BULK_STRING_END_LF,
+                target=State.WAIT_BULK_STRING_FINAL_LF,
                 condition="is_carriage_return",
             ),
             Rule(
-                source=State.WAIT_BULK_STRING_END_LF,
+                source=State.WAIT_BULK_STRING_FINAL_LF,
                 event="byte",
                 target=State.WAIT_FOR_TYPE,
                 condition="is_line_feed",
                 action="finish_bulk_string",
+            ),
+            Rule(
+                source=State.WAIT_NULL_BULK_STRING_ONE,
+                event="byte",
+                target=State.WAIT_NULL_BULK_STRING_CR,
+                condition="is_one",
+            ),
+            Rule(
+                source=State.WAIT_NULL_BULK_STRING_CR,
+                event="byte",
+                target=State.WAIT_NULL_BULK_STRING_LF,
+                condition="is_carriage_return",
+            ),
+            Rule(
+                source=State.WAIT_NULL_BULK_STRING_LF,
+                event="byte",
+                target=State.WAIT_FOR_TYPE,
+                condition="is_line_feed",
+                action="finish_null_bulk_string",
             ),
             Rule(
                 source=State.READ_ARRAY_LENGTH,
@@ -180,6 +215,12 @@ class RedisProtocolParser(StateMachine):
     def is_digit(self, byte: int) -> bool:
         return Token.ZERO <= byte <= Token.NINE
 
+    def is_minus(self, byte: int) -> bool:
+        return byte == Token.MINUS
+
+    def is_one(self, byte: int) -> bool:
+        return byte == Token.ONE
+
     def has_bulk_string_bytes_remaining(self, byte: int) -> bool:
         return self._bulk_string_bytes_remaining > 0
 
@@ -209,6 +250,11 @@ class RedisProtocolParser(StateMachine):
     def parse_array_length(self, byte) -> None:
         self._array_items_remaining = int(self._buffer)
         self._buffer.clear()
+
+    def finish_null_bulk_string(self, byte: int) -> Event | None:
+        null_bull_string = NullBulkString()
+
+        return self._accept_event(null_bull_string)
 
     def _accept_event(self, event: Event) -> Event | None:
         if self._array_items_remaining == 0:
@@ -244,7 +290,7 @@ class RedisProtocol:
             try:
                 event = self._parser.send("byte", byte)
             except UnknownTransitionError as e:
-                raise RedisProtocolError(f"Illegal sequence: {byte!r}") from e
+                raise RedisProtocolError(f"Illegal sequence: {byte.to_bytes()}") from e
 
             if event is not None:
                 events.append(event)

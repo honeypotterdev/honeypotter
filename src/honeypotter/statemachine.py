@@ -48,6 +48,8 @@ class StateMachine(ABC):
                 if not condition_callback(*args, **kwargs):
                     continue
 
+            print(f"{self._current_state} -> {candidate.target} ({args!r}, {kwargs!r})")
+
             self._current_state = candidate.target
 
             if candidate.action is None:
