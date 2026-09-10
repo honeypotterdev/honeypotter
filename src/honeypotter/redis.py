@@ -64,36 +64,46 @@ class RedisProtocolParser(StateMachine):
 
     def get_rules(self) -> list[Rule]:
         return [
-            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_SIMPLE_STRING, condition="is_plus"),
-            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_BULK_STRING_LENGTH, condition="is_dollar"),
-            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_ARRAY_LENGTH, condition="is_asterisk"),
+            Rule(
+                source=State.WAIT_FOR_TYPE,
+                event="byte",
+                target=State.READ_SIMPLE_STRING,
+                condition="is_simple_string_prefix",
+            ),
+            Rule(
+                source=State.WAIT_FOR_TYPE,
+                event="byte",
+                target=State.READ_BULK_STRING_LENGTH,
+                condition="is_bulk_string_prefix",
+            ),
+            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_ARRAY_LENGTH, condition="is_array_prefix"),
             Rule(
                 source=State.READ_SIMPLE_STRING,
                 event="byte",
                 target=State.WAIT_SIMPLE_STRING_LF,
                 condition="is_carriage_return",
             ),
-            Rule(source=State.READ_SIMPLE_STRING, event="byte", target=State.READ_SIMPLE_STRING, action="buffer"),
+            Rule(source=State.READ_SIMPLE_STRING, event="byte", target=State.READ_SIMPLE_STRING, action="append_byte"),
             Rule(
                 source=State.WAIT_SIMPLE_STRING_LF,
                 event="byte",
                 target=State.WAIT_FOR_TYPE,
                 condition="is_line_feed",
-                action="accept_simple_string",
+                action="finish_simple_string",
             ),
             Rule(
                 source=State.READ_BULK_STRING_LENGTH,
                 event="byte",
                 target=State.READ_BULK_STRING_LENGTH,
                 condition="is_digit",
-                action="buffer",
+                action="append_byte",
             ),
             Rule(
                 source=State.READ_BULK_STRING_LENGTH,
                 event="byte",
                 target=State.WAIT_BULK_STRING_BEGIN_LF,
                 condition="is_carriage_return",
-                action="remember_bulk_string_length",
+                action="parse_bulk_string_length",
             ),
             Rule(
                 source=State.WAIT_BULK_STRING_BEGIN_LF,
@@ -105,8 +115,8 @@ class RedisProtocolParser(StateMachine):
                 source=State.READ_BULK_STRING,
                 event="byte",
                 target=State.READ_BULK_STRING,
-                condition="is_bulk_string_bytes_remaining",
-                action="buffer_bulk_string",
+                condition="has_bulk_string_bytes_remaining",
+                action="consume_bulk_string_byte",
             ),
             Rule(
                 source=State.READ_BULK_STRING,
@@ -119,32 +129,32 @@ class RedisProtocolParser(StateMachine):
                 event="byte",
                 target=State.WAIT_FOR_TYPE,
                 condition="is_line_feed",
-                action="accept_bulk_string",
+                action="finish_bulk_string",
             ),
             Rule(
                 source=State.READ_ARRAY_LENGTH,
                 event="byte",
                 target=State.READ_ARRAY_LENGTH,
                 condition="is_digit",
-                action="buffer",
+                action="append_byte",
             ),
             Rule(
                 source=State.READ_ARRAY_LENGTH,
                 event="byte",
                 target=State.WAIT_ARRAY_HEADER_LF,
                 condition="is_carriage_return",
-                action="remember_array_length",
+                action="parse_array_length",
             ),
             Rule(source=State.WAIT_ARRAY_HEADER_LF, event="byte", target=State.WAIT_FOR_TYPE, condition="is_line_feed"),
         ]
 
-    def is_plus(self, byte: int) -> bool:
+    def is_simple_string_prefix(self, byte: int) -> bool:
         return byte == Token.PLUS
 
-    def is_dollar(self, byte: int) -> bool:
+    def is_bulk_string_prefix(self, byte: int) -> bool:
         return byte == Token.DOLLAR
 
-    def is_asterisk(self, byte: int) -> bool:
+    def is_array_prefix(self, byte: int) -> bool:
         return byte == Token.ASTERISK
 
     def is_carriage_return(self, byte: int) -> bool:
@@ -156,46 +166,41 @@ class RedisProtocolParser(StateMachine):
     def is_digit(self, byte: int) -> bool:
         return Token.ZERO <= byte <= Token.NINE
 
-    def is_bulk_string_bytes_remaining(self, byte: int) -> bool:
+    def has_bulk_string_bytes_remaining(self, byte: int) -> bool:
         return self._bulk_string_bytes_remaining > 0
 
-    def buffer(self, byte: int) -> None:
+    def append_byte(self, byte: int) -> None:
         self._buffer.append(byte)
 
-    def accept_simple_string(self, byte: int) -> SimpleString | Array | None:
+    def finish_simple_string(self, byte: int) -> Event | None:
         simple_string = SimpleString(string=bytes(self._buffer))
         self._buffer.clear()
 
-        if self._array_items_remaining == 0:
-            return simple_string
+        return self._accept_event(simple_string)
 
-        self._array_buffer.append(simple_string)
-        self._array_items_remaining -= 1
-
-        if self._array_items_remaining != 0:
-            return None
-
-        array = Array(array=self._array_buffer)
-        self._array_buffer = []
-
-        return array
-
-    def remember_bulk_string_length(self, byte: int) -> None:
+    def parse_bulk_string_length(self, byte: int) -> None:
         self._bulk_string_bytes_remaining = int(self._buffer)
         self._buffer.clear()
 
-    def buffer_bulk_string(self, byte: int) -> None:
+    def consume_bulk_string_byte(self, byte: int) -> None:
         self._buffer.append(byte)
         self._bulk_string_bytes_remaining -= 1
 
-    def accept_bulk_string(self, byte: int) -> BulkString | Array | None:
+    def finish_bulk_string(self, byte: int) -> Event | None:
         bulk_string = BulkString(string=bytes(self._buffer))
         self._buffer.clear()
 
-        if self._array_items_remaining == 0:
-            return bulk_string
+        return self._accept_event(bulk_string)
 
-        self._array_buffer.append(bulk_string)
+    def parse_array_length(self, byte) -> None:
+        self._array_items_remaining = int(self._buffer)
+        self._buffer.clear()
+
+    def _accept_event(self, event: Event) -> Event | None:
+        if self._array_items_remaining == 0:
+            return event
+
+        self._array_buffer.append(event)
         self._array_items_remaining -= 1
 
         if self._array_items_remaining != 0:
@@ -205,29 +210,17 @@ class RedisProtocolParser(StateMachine):
         self._array_buffer = []
 
         return array
-
-    def remember_array_length(self, byte) -> None:
-        self._array_items_remaining = int(self._buffer)
-        self._buffer.clear()
 
 
 class RedisProtocol:
     def __init__(self) -> None:
-        self._state = State.WAIT_FOR_TYPE
-        self._buffer = bytearray()
-        self._bulk_string_bytes_remaining = 0
-        self._array_items_remaining = 0
-        self._array_buffer: list[Event] = []
-
         self._parser = RedisProtocolParser()
 
     def receive_data(self, data: bytes) -> list[Event]:
         events = []
 
         for byte in data:
-            event = self._parser.send("byte", byte)
-
-            if event is not None:
+            if (event := self._parser.send("byte", byte)) is not None:
                 events.append(event)
 
         return events
@@ -237,18 +230,6 @@ class RedisProtocol:
 
     def send_simple_error(self, error: bytes) -> bytes:
         return b"-" + error + b"\r\n"
-
-    def _accept_event(self, event: Event, events: list[Event]) -> None:
-        if self._array_items_remaining == 0:
-            events.append(event)
-            return
-
-        self._array_buffer.append(event)
-        self._array_items_remaining -= 1
-
-        if self._array_items_remaining == 0:
-            events.append(Array(array=self._array_buffer))
-            self._array_buffer = []
 
 
 class RedisCodec(Layer):
