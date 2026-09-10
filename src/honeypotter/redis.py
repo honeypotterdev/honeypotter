@@ -4,6 +4,7 @@ from enum import Enum, IntEnum, auto
 from typing import Any
 
 from honeypotter.core import Context, Layer
+from honeypotter.sm import Rule, StateMachine
 from honeypotter.transport import DataEvent
 
 _logger = logging.getLogger(__name__)
@@ -49,6 +50,167 @@ class Array:
 Event = SimpleString | BulkString | Array
 
 
+class RedisProtocolParser(StateMachine):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self._buffer = bytearray()
+        self._bulk_string_bytes_remaining = 0
+        self._array_items_remaining = 0
+        self._array_buffer: list[Event] = []
+
+    def get_initial_state(self) -> State:
+        return State.WAIT_FOR_TYPE
+
+    def get_rules(self) -> list[Rule]:
+        return [
+            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_SIMPLE_STRING, condition="is_plus"),
+            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_BULK_STRING_LENGTH, condition="is_dollar"),
+            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_ARRAY_LENGTH, condition="is_asterisk"),
+            Rule(
+                source=State.READ_SIMPLE_STRING,
+                event="byte",
+                target=State.WAIT_SIMPLE_STRING_LF,
+                condition="is_carriage_return",
+            ),
+            Rule(source=State.READ_SIMPLE_STRING, event="byte", target=State.READ_SIMPLE_STRING, action="buffer"),
+            Rule(
+                source=State.WAIT_SIMPLE_STRING_LF,
+                event="byte",
+                target=State.WAIT_FOR_TYPE,
+                condition="is_line_feed",
+                action="accept_simple_string",
+            ),
+            Rule(
+                source=State.READ_BULK_STRING_LENGTH,
+                event="byte",
+                target=State.READ_BULK_STRING_LENGTH,
+                condition="is_digit",
+                action="buffer",
+            ),
+            Rule(
+                source=State.READ_BULK_STRING_LENGTH,
+                event="byte",
+                target=State.WAIT_BULK_STRING_BEGIN_LF,
+                condition="is_carriage_return",
+                action="remember_bulk_string_length",
+            ),
+            Rule(
+                source=State.WAIT_BULK_STRING_BEGIN_LF,
+                event="byte",
+                target=State.READ_BULK_STRING,
+                condition="is_line_feed",
+            ),
+            Rule(
+                source=State.READ_BULK_STRING,
+                event="byte",
+                target=State.READ_BULK_STRING,
+                condition="is_bulk_string_bytes_remaining",
+                action="buffer_bulk_string",
+            ),
+            Rule(
+                source=State.READ_BULK_STRING,
+                event="byte",
+                target=State.WAIT_BULK_STRING_END_LF,
+                condition="is_carriage_return",
+            ),
+            Rule(
+                source=State.WAIT_BULK_STRING_END_LF,
+                event="byte",
+                target=State.WAIT_FOR_TYPE,
+                condition="is_line_feed",
+                action="accept_bulk_string",
+            ),
+            Rule(
+                source=State.READ_ARRAY_LENGTH,
+                event="byte",
+                target=State.READ_ARRAY_LENGTH,
+                condition="is_digit",
+                action="buffer",
+            ),
+            Rule(
+                source=State.READ_ARRAY_LENGTH,
+                event="byte",
+                target=State.WAIT_ARRAY_HEADER_LF,
+                condition="is_carriage_return",
+                action="remember_array_length",
+            ),
+            Rule(source=State.WAIT_ARRAY_HEADER_LF, event="byte", target=State.WAIT_FOR_TYPE, condition="is_line_feed"),
+        ]
+
+    def is_plus(self, byte: int) -> bool:
+        return byte == Token.PLUS
+
+    def is_dollar(self, byte: int) -> bool:
+        return byte == Token.DOLLAR
+
+    def is_asterisk(self, byte: int) -> bool:
+        return byte == Token.ASTERISK
+
+    def is_carriage_return(self, byte: int) -> bool:
+        return byte == Token.CR
+
+    def is_line_feed(self, byte: int) -> bool:
+        return byte == Token.LF
+
+    def is_digit(self, byte: int) -> bool:
+        return Token.ZERO <= byte <= Token.NINE
+
+    def is_bulk_string_bytes_remaining(self, byte: int) -> bool:
+        return self._bulk_string_bytes_remaining > 0
+
+    def buffer(self, byte: int) -> None:
+        self._buffer.append(byte)
+
+    def accept_simple_string(self, byte: int) -> SimpleString | Array | None:
+        simple_string = SimpleString(string=bytes(self._buffer))
+        self._buffer.clear()
+
+        if self._array_items_remaining == 0:
+            return simple_string
+
+        self._array_buffer.append(simple_string)
+        self._array_items_remaining -= 1
+
+        if self._array_items_remaining != 0:
+            return None
+
+        array = Array(array=self._array_buffer)
+        self._array_buffer = []
+
+        return array
+
+    def remember_bulk_string_length(self, byte: int) -> None:
+        self._bulk_string_bytes_remaining = int(self._buffer)
+        self._buffer.clear()
+
+    def buffer_bulk_string(self, byte: int) -> None:
+        self._buffer.append(byte)
+        self._bulk_string_bytes_remaining -= 1
+
+    def accept_bulk_string(self, byte: int) -> BulkString | Array | None:
+        bulk_string = BulkString(string=bytes(self._buffer))
+        self._buffer.clear()
+
+        if self._array_items_remaining == 0:
+            return bulk_string
+
+        self._array_buffer.append(bulk_string)
+        self._array_items_remaining -= 1
+
+        if self._array_items_remaining != 0:
+            return None
+
+        array = Array(array=self._array_buffer)
+        self._array_buffer = []
+
+        return array
+
+    def remember_array_length(self, byte) -> None:
+        self._array_items_remaining = int(self._buffer)
+        self._buffer.clear()
+
+
 class RedisProtocol:
     def __init__(self) -> None:
         self._state = State.WAIT_FOR_TYPE
@@ -57,64 +219,16 @@ class RedisProtocol:
         self._array_items_remaining = 0
         self._array_buffer: list[Event] = []
 
+        self._parser = RedisProtocolParser()
+
     def receive_data(self, data: bytes) -> list[Event]:
-        events: list[Event] = []
+        events = []
 
         for byte in data:
-            match self._state, byte:
-                case State.WAIT_FOR_TYPE, Token.PLUS:
-                    self._state = State.READ_SIMPLE_STRING
-                case State.WAIT_FOR_TYPE, Token.DOLLAR:
-                    self._state = State.READ_BULK_STRING_LENGTH
-                case State.WAIT_FOR_TYPE, Token.ASTERISK:
-                    self._state = State.READ_ARRAY_LENGTH
+            event = self._parser.send("byte", byte)
 
-                case State.READ_SIMPLE_STRING, Token.CR:
-                    self._state = State.WAIT_SIMPLE_STRING_LF
-                case State.READ_SIMPLE_STRING, byte:
-                    self._state = State.READ_SIMPLE_STRING
-                    self._buffer.append(byte)
-                case State.WAIT_SIMPLE_STRING_LF, Token.LF:
-                    self._state = State.WAIT_FOR_TYPE
-                    self._accept_event(SimpleString(string=bytes(self._buffer)), events)
-                    self._buffer.clear()
-
-                case State.READ_BULK_STRING_LENGTH, byte if Token.ZERO <= byte <= Token.NINE:
-                    self._state = State.READ_BULK_STRING_LENGTH
-                    self._buffer.append(byte)
-                case State.READ_BULK_STRING_LENGTH, Token.CR:
-                    self._state = State.WAIT_BULK_STRING_BEGIN_LF
-                    self._bulk_string_bytes_remaining = int(self._buffer)
-                    self._buffer.clear()
-
-                case State.WAIT_BULK_STRING_BEGIN_LF, Token.LF:
-                    self._state = State.READ_BULK_STRING
-
-                case State.READ_BULK_STRING, byte if self._bulk_string_bytes_remaining > 0:
-                    self._state = State.READ_BULK_STRING
-                    self._buffer.append(byte)
-                    self._bulk_string_bytes_remaining -= 1
-                case State.READ_BULK_STRING, Token.CR:
-                    self._state = State.WAIT_BULK_STRING_END_LF
-
-                case State.WAIT_BULK_STRING_END_LF, Token.LF:
-                    self._state = State.WAIT_FOR_TYPE
-                    self._accept_event(BulkString(string=bytes(self._buffer)), events)
-                    self._buffer.clear()
-
-                case State.READ_ARRAY_LENGTH, byte if Token.ZERO <= byte <= Token.NINE:
-                    self._state = State.READ_ARRAY_LENGTH
-                    self._buffer.append(byte)
-                case State.READ_ARRAY_LENGTH, Token.CR:
-                    self._state = State.WAIT_ARRAY_HEADER_LF
-                    self._array_items_remaining = int(self._buffer)
-                    self._buffer.clear()
-
-                case State.WAIT_ARRAY_HEADER_LF, Token.LF:
-                    self._state = State.WAIT_FOR_TYPE
-
-                case state, byte:
-                    raise ValueError(f"Unknown byte {byte.to_bytes()!r} in state {state!r}, buffer {self._buffer!r}")
+            if event is not None:
+                events.append(event)
 
         return events
 

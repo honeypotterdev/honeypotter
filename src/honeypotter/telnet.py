@@ -83,32 +83,36 @@ class TelnetOption(StateMachine):
     def get_rules(self) -> list[Rule]:
         return [
             # NO
-            Rule("no", "request_enable", "wantyes_empty", action="send_enable"),
-            Rule("no", "receive_enable_accept", "yes", action="send_enable"),
-            Rule("no", "receive_enable_reject", "no", action="send_disable"),
+            Rule(source="no", event="request_enable", target="wantyes_empty", action="send_enable"),
+            Rule(source="no", event="receive_enable_accept", target="yes", action="send_enable"),
+            Rule(source="no", event="receive_enable_reject", target="no", action="send_disable"),
             # YES
-            Rule("yes", "request_disable", "wantno_empty", action="send_disable"),
-            Rule("yes", "receive_disable", "no", action="send_disable"),
+            Rule(source="yes", event="request_disable", target="wantno_empty", action="send_disable"),
+            Rule(source="yes", event="receive_disable", target="no", action="send_disable"),
             # WANTNO_EMPTY
-            Rule("wantno_empty", "request_enable", "wantno_opposite"),
-            Rule("wantno_empty", "receive_enable_accept", "no"),
-            Rule("wantno_empty", "receive_enable_reject", "no"),
-            Rule("wantno_empty", "receive_disable", "no"),
+            Rule(source="wantno_empty", event="request_enable", target="wantno_opposite"),
+            Rule(source="wantno_empty", event="receive_enable_accept", target="no"),
+            Rule(source="wantno_empty", event="receive_enable_reject", target="no"),
+            Rule(source="wantno_empty", event="receive_disable", target="no"),
             # WANTNO_OPPOSITE
-            Rule("wantno_opposite", "request_disable", "wantno_empty"),
-            Rule("wantno_opposite", "receive_enable_accept", "yes"),
-            Rule("wantno_opposite", "receive_enable_reject", "yes"),
-            Rule("wantno_opposite", "receive_disable", "wantyes_empty", action="send_enable"),
+            Rule(source="wantno_opposite", event="request_disable", target="wantno_empty"),
+            Rule(source="wantno_opposite", event="receive_enable_accept", target="yes"),
+            Rule(source="wantno_opposite", event="receive_enable_reject", target="yes"),
+            Rule(source="wantno_opposite", event="receive_disable", target="wantyes_empty", action="send_enable"),
             # WANTYES_EMPTY
-            Rule("wantyes_empty", "request_disable", "wantyes_opposite"),
-            Rule("wantyes_empty", "receive_enable_accept", "yes"),
-            Rule("wantyes_empty", "receive_enable_reject", "yes"),
-            Rule("wantyes_empty", "receive_disable", "no"),
+            Rule(source="wantyes_empty", event="request_disable", target="wantyes_opposite"),
+            Rule(source="wantyes_empty", event="receive_enable_accept", target="yes"),
+            Rule(source="wantyes_empty", event="receive_enable_reject", target="yes"),
+            Rule(source="wantyes_empty", event="receive_disable", target="no"),
             # WANTYES_OPPOSITE
-            Rule("wantyes_opposite", "request_enable", "wantyes_empty"),
-            Rule("wantyes_opposite", "receive_enable_accept", "wantno_empty", action="send_disable"),
-            Rule("wantyes_opposite", "receive_enable_reject", "wantno_empty", action="send_disable"),
-            Rule("wantyes_opposite", "receive_disable", "no"),
+            Rule(source="wantyes_opposite", event="request_enable", target="wantyes_empty"),
+            Rule(
+                source="wantyes_opposite", event="receive_enable_accept", target="wantno_empty", action="send_disable"
+            ),
+            Rule(
+                source="wantyes_opposite", event="receive_enable_reject", target="wantno_empty", action="send_disable"
+            ),
+            Rule(source="wantyes_opposite", event="receive_disable", target="no"),
         ]
 
     def send_enable(self) -> OptionAction:
