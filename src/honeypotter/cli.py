@@ -8,7 +8,7 @@ from honeypotter.core import Context, Layer
 from honeypotter.decoders import LineDecoder
 from honeypotter.exporters import TelnetConnectionExporter
 from honeypotter.layers import InboundIdleTimeoutLayer, IpRateLimiter, TrafficLoggingLayer
-from honeypotter.redis import RedisCodec
+from honeypotter.redis import RedisSession
 from honeypotter.shell import ShellSession
 from honeypotter.telnet import TelnetCodec, TelnetSession
 from honeypotter.transport import TransportProtocolFactory
@@ -73,7 +73,7 @@ async def _run_redis_server(*, host: str, port: int) -> None:
 
     _logger.info("Starting server on %s:%s", host, port)
 
-    layer_factories: list[Callable[[Context], Layer]] = [TrafficLoggingLayer, RedisCodec]
+    layer_factories: list[Callable[[Context], Layer]] = [TrafficLoggingLayer, RedisSession]
 
     _logger.debug("Layers: %s", layer_factories)
 

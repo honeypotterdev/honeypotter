@@ -1,10 +1,10 @@
 import logging
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
-from typing import Any
+from typing import Any, Literal
 
 from honeypotter.core import Context, Layer
-from honeypotter.sm import Rule, StateMachine
+from honeypotter.sm import Rule, StateMachine, UnknownTransitionError
 from honeypotter.transport import DataEvent
 
 _logger = logging.getLogger(__name__)
@@ -20,6 +20,7 @@ class State(Enum):
     READ_BULK_STRING = auto()
     READ_ARRAY_LENGTH = auto()
     WAIT_ARRAY_HEADER_LF = auto()
+    ERROR = auto()
 
 
 class Token(IntEnum):
@@ -59,8 +60,14 @@ class RedisProtocolParser(StateMachine):
         self._array_items_remaining = 0
         self._array_buffer: list[Event] = []
 
+    def get_strategy(self) -> Literal["ignore", "error"]:
+        return "error"
+
     def get_initial_state(self) -> State:
         return State.WAIT_FOR_TYPE
+
+    def get_final_state(self) -> Any:
+        return State.ERROR
 
     def get_rules(self) -> list[Rule]:
         return [
@@ -77,6 +84,13 @@ class RedisProtocolParser(StateMachine):
                 condition="is_bulk_string_prefix",
             ),
             Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_ARRAY_LENGTH, condition="is_array_prefix"),
+            Rule(
+                source=State.READ_SIMPLE_STRING,
+                event="byte",
+                target=State.ERROR,
+                condition="is_line_feed",
+                action="error",
+            ),
             Rule(
                 source=State.READ_SIMPLE_STRING,
                 event="byte",
@@ -211,6 +225,13 @@ class RedisProtocolParser(StateMachine):
 
         return array
 
+    def error(self, byte: int) -> None:
+        raise RedisProtocolError(f"Illegal sequence: {byte!r}")
+
+
+class RedisProtocolError(Exception):
+    pass
+
 
 class RedisProtocol:
     def __init__(self) -> None:
@@ -220,7 +241,12 @@ class RedisProtocol:
         events = []
 
         for byte in data:
-            if (event := self._parser.send("byte", byte)) is not None:
+            try:
+                event = self._parser.send("byte", byte)
+            except UnknownTransitionError as e:
+                raise RedisProtocolError(f"Illegal sequence: {byte!r}") from e
+
+            if event is not None:
                 events.append(event)
 
         return events
@@ -232,7 +258,7 @@ class RedisProtocol:
         return b"-" + error + b"\r\n"
 
 
-class RedisCodec(Layer):
+class RedisSession(Layer):
     def __init__(self, context: Context) -> None:
         super().__init__(context)
         self._protocol = RedisProtocol()

@@ -1,32 +1,24 @@
 ```mermaid
-info
-```
-
-```mermaid
 ---
-title: TelnetOption
+title: RedisProtocolParser
 ---
 stateDiagram-v2
-[*] --> no
-no --> wantyes_empty: request_enable
-no --> yes: receive_enable_accept
-no --> no: receive_enable_reject
-yes --> wantno_empty: request_disable
-yes --> no: receive_disable
-wantno_empty --> wantno_opposite: request_enable
-wantno_empty --> no: receive_enable_accept
-wantno_empty --> no: receive_enable_reject
-wantno_empty --> no: receive_disable
-wantno_opposite --> wantno_empty: request_disable
-wantno_opposite --> yes: receive_enable_accept
-wantno_opposite --> yes: receive_enable_reject
-wantno_opposite --> wantyes_empty: receive_disable
-wantyes_empty --> wantyes_opposite: request_disable
-wantyes_empty --> yes: receive_enable_accept
-wantyes_empty --> yes: receive_enable_reject
-wantyes_empty --> no: receive_disable
-wantyes_opposite --> wantyes_empty: request_enable
-wantyes_opposite --> wantno_empty: receive_enable_accept
-wantyes_opposite --> wantno_empty: receive_enable_reject
-wantyes_opposite --> no: receive_disable
+[*] --> WAIT_FOR_TYPE
+WAIT_FOR_TYPE --> READ_SIMPLE_STRING: byte[is_simple_string_prefix]
+WAIT_FOR_TYPE --> READ_BULK_STRING_LENGTH: byte[is_bulk_string_prefix]
+WAIT_FOR_TYPE --> READ_ARRAY_LENGTH: byte[is_array_prefix]
+READ_SIMPLE_STRING --> ERROR: byte[is_line_feed]
+READ_SIMPLE_STRING --> WAIT_SIMPLE_STRING_LF: byte[is_carriage_return]
+READ_SIMPLE_STRING --> READ_SIMPLE_STRING: byte
+WAIT_SIMPLE_STRING_LF --> WAIT_FOR_TYPE: byte[is_line_feed]
+READ_BULK_STRING_LENGTH --> READ_BULK_STRING_LENGTH: byte[is_digit]
+READ_BULK_STRING_LENGTH --> WAIT_BULK_STRING_BEGIN_LF: byte[is_carriage_return]
+WAIT_BULK_STRING_BEGIN_LF --> READ_BULK_STRING: byte[is_line_feed]
+READ_BULK_STRING --> READ_BULK_STRING: byte[has_bulk_string_bytes_remaining]
+READ_BULK_STRING --> WAIT_BULK_STRING_END_LF: byte[is_carriage_return]
+WAIT_BULK_STRING_END_LF --> WAIT_FOR_TYPE: byte[is_line_feed]
+READ_ARRAY_LENGTH --> READ_ARRAY_LENGTH: byte[is_digit]
+READ_ARRAY_LENGTH --> WAIT_ARRAY_HEADER_LF: byte[is_carriage_return]
+WAIT_ARRAY_HEADER_LF --> WAIT_FOR_TYPE: byte[is_line_feed]
+ERROR --> [*]
 ```
