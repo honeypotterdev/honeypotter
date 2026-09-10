@@ -247,9 +247,15 @@ class RedisProtocolParser(StateMachine):
 
         return self._accept_event(bulk_string)
 
-    def parse_array_length(self, byte) -> None:
+    def parse_array_length(self, byte) -> Event | None:
         self._array_items_remaining = int(self._buffer)
         self._buffer.clear()
+
+        # Zero length array case
+        if self._array_items_remaining == 0:
+            return Array(array=[])
+
+        return None
 
     def finish_null_bulk_string(self, byte: int) -> Event | None:
         null_bull_string = NullBulkString()

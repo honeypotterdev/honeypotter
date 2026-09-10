@@ -37,3 +37,6 @@ class TestRedisProtocol:
                 ]
             )
         ]
+
+    def test_receive_data_array_empty(self, protocol: RedisProtocol) -> None:
+        assert protocol.receive_data(b"*0\r\n") == [Array(array=[])]
