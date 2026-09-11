@@ -22,7 +22,7 @@ class UnhandledEventError(StateMachineError):
     pass
 
 
-class TerminatedError(StateMachineError):
+class MachineTerminatedError(StateMachineError):
     pass
 
 
@@ -52,7 +52,7 @@ class StateMachine(ABC):
 
     def send(self, event: Any, *args: Any, **kwargs: Any) -> Any | None:
         if self.is_terminated:
-            raise TerminatedError("")
+            raise MachineTerminatedError
 
         candidates = self._transitions[(self._current_state, event)]
 
