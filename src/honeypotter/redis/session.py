@@ -2,8 +2,8 @@ import logging
 from typing import Any
 
 from honeypotter.core import Context, Layer
-from honeypotter.redis.parser import Array, BulkString
 from honeypotter.redis.protocol import ConnectionEvent, RedisConnection
+from honeypotter.redis.values import Array, BulkString
 from honeypotter.transport import DataEvent
 
 _logger = logging.getLogger(__name__)

@@ -1,7 +1,7 @@
-from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from typing import Any
 
+from honeypotter.redis.values import Array, BulkString, NullBulkString, RespValue, SimpleString
 from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
 
 
@@ -31,29 +31,6 @@ class Token(IntEnum):
     ONE = ord(b"1")
     NINE = ord(b"9")
     MINUS = ord(b"-")
-
-
-@dataclass(frozen=True, kw_only=True)
-class SimpleString:
-    string: bytes
-
-
-@dataclass(frozen=True, kw_only=True)
-class BulkString:
-    string: bytes
-
-
-@dataclass(frozen=True, kw_only=True)
-class NullBulkString:
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class Array:
-    array: list[RespValue]
-
-
-type RespValue = SimpleString | BulkString | NullBulkString | Array
 
 
 class RespParseError(Exception):
