@@ -262,6 +262,9 @@ class RedisProtocolParser(StateMachine):
 
         return self._accept_event(null_bull_string)
 
+    def error(self, byte: int) -> None:
+        raise RedisProtocolError(f"Illegal sequence: {byte!r}")
+
     def _accept_event(self, event: Event) -> Event | None:
         if self._array_items_remaining == 0:
             return event
@@ -276,9 +279,6 @@ class RedisProtocolParser(StateMachine):
         self._array_buffer = []
 
         return array
-
-    def error(self, byte: int) -> None:
-        raise RedisProtocolError(f"Illegal sequence: {byte!r}")
 
 
 class RedisProtocolError(Exception):
