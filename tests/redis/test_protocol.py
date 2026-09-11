@@ -18,7 +18,7 @@ class TestRedisConnection:
     def test_receive_data_simple_string_empty(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+\r\n") == [SimpleString(string=b"")]
 
-    def test_receive_data_simple_string_illegal_line_feed(self, connection: RedisConnection) -> None:
+    def test_receive_data_simple_string_unexpected_line_feed(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+foo\nbar\r\n") == [ProtocolErrorOccurred()]
 
     def test_receive_data_bulk_string(self, connection: RedisConnection) -> None:

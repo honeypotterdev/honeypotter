@@ -180,9 +180,6 @@ class RespParser(StateMachine):
             error = RespParseError("Unhandled event occurred", state=self._current_state, byte=byte)
             self._transition_to(State.FAILED)
             raise error from e
-        except RespParseError:  # TODO: Refactor
-            self._transition_to(State.FAILED)
-            raise
 
     def is_simple_string_prefix(self, byte: int) -> bool:
         return byte == Token.PLUS
