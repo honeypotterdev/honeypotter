@@ -4,7 +4,7 @@ from enum import Enum, IntEnum, auto
 from typing import Any
 
 from honeypotter.core import Context, Layer
-from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
+from honeypotter.statemachine import Rule, StateMachine, StateMachineError
 from honeypotter.transport import DataEvent
 
 _logger = logging.getLogger(__name__)
@@ -202,7 +202,7 @@ class RedisProtocolParser(StateMachine):
     def feed_byte(self, byte: int) -> Event | None:
         try:
             return self.send("byte", byte)
-        except UnhandledEventError as e:
+        except StateMachineError as e:
             self._transition_to(State.FAILED)
             raise RemoteProtocolError(f"Illegal sequence: {byte.to_bytes()}") from e
         except RemoteProtocolError:
