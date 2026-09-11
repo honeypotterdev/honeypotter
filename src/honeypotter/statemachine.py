@@ -33,10 +33,9 @@ class StateMachine(ABC):
 
     @property
     def is_terminated(self) -> bool:
-        if final_state := self.get_final_state() is None:
-            return False
+        final_state = self.get_final_state()
 
-        return self._current_state == final_state
+        return final_state is not None and self._current_state == final_state
 
     @abstractmethod
     def get_initial_state(self) -> Any: ...

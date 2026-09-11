@@ -57,7 +57,10 @@ type RespValue = SimpleString | BulkString | NullBulkString | Array
 
 
 class RespParseError(Exception):
-    pass
+    def __init__(self, message: str, *, state: State, byte: int) -> None:
+        super().__init__(message)
+        self.state = state
+        self.byte = byte
 
 
 class RespParser(StateMachine):
@@ -197,8 +200,9 @@ class RespParser(StateMachine):
         try:
             return self.send("byte", byte)
         except UnhandledEventError as e:
+            error = RespParseError("Unhandled event occurred", state=self._current_state, byte=byte)
             self._transition_to(State.FAILED)
-            raise RespParseError(f"Illegal sequence: {byte.to_bytes()}") from e
+            raise error from e
         except RespParseError:  # TODO: Refactor
             self._transition_to(State.FAILED)
             raise
@@ -253,7 +257,7 @@ class RespParser(StateMachine):
 
         return self._accept_value(bulk_string)
 
-    def parse_array_length(self, byte) -> RespValue | None:
+    def parse_array_length(self, byte: int) -> RespValue | None:
         self._array_items_remaining = int(self._buffer)
         self._buffer.clear()
 
@@ -269,7 +273,7 @@ class RespParser(StateMachine):
         return self._accept_value(null_bull_string)
 
     def reject_unexpected_lf(self, byte: int) -> None:
-        raise RespParseError(f"Illegal sequence: {byte!r}")
+        raise RespParseError("Unexpected LF", state=self._current_state, byte=byte)
 
     def _accept_value(self, event: RespValue) -> RespValue | None:
         if self._array_items_remaining == 0:
