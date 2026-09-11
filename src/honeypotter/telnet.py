@@ -154,6 +154,9 @@ class TelnetOption(StateMachine):
             Rule(source=OptionState.WANTYES_OPPOSITE, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO),
         ]
 
+    def on_unhandled_event(self, event: Any, *args: Any, **kwargs: Any) -> None:
+        pass
+
     def send_enable(self) -> OptionAction:
         return OptionAction.SEND_ENABLE
 
@@ -166,7 +169,7 @@ class OptionNegotiator:
         self._options: dict[int, TelnetOption] = defaultdict[int, TelnetOption](lambda: TelnetOption())
 
     def is_enabled(self, option: int) -> bool:
-        return self._options[option].get_current_state() == OptionState.YES
+        return self._options[option].get_current_state() is OptionState.YES
 
     def request_enable(self, option: int) -> OptionAction | None:
         return self._options[option].send(OptionInput.REQUEST_ENABLE)

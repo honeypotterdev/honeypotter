@@ -8,7 +8,7 @@ from honeypotter.core import Context, Layer
 from honeypotter.decoders import LineDecoder
 from honeypotter.exporters import TelnetConnectionExporter
 from honeypotter.layers import InboundIdleTimeoutLayer, IpRateLimiter, TrafficLoggingLayer
-from honeypotter.redis import RedisSession
+from honeypotter.redis.session import RedisSession
 from honeypotter.shell import ShellSession
 from honeypotter.telnet import TelnetCodec, TelnetSession
 from honeypotter.transport import TransportProtocolFactory

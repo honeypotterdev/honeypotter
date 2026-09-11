@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -14,7 +14,15 @@ class Rule:
     action: str | None = None
 
 
-class UnknownTransitionError(Exception):
+class StateMachineError(Exception):
+    pass
+
+
+class UnhandledEventError(StateMachineError):
+    pass
+
+
+class MachineTerminatedError(StateMachineError):
     pass
 
 
@@ -23,8 +31,11 @@ class StateMachine(ABC):
         self._current_state = self.get_initial_state()
         self._transitions = self._create_transitions()
 
-    def get_strategy(self) -> Literal["ignore", "error"]:
-        return "ignore"
+    @property
+    def is_terminated(self) -> bool:
+        final_state = self.get_final_state()
+
+        return final_state is not None and self._current_state == final_state
 
     @abstractmethod
     def get_initial_state(self) -> Any: ...
@@ -39,6 +50,9 @@ class StateMachine(ABC):
         return self._current_state
 
     def send(self, event: Any, *args: Any, **kwargs: Any) -> Any | None:
+        if self.is_terminated:
+            raise MachineTerminatedError
+
         candidates = self._transitions[(self._current_state, event)]
 
         for candidate in candidates:
@@ -48,9 +62,7 @@ class StateMachine(ABC):
                 if not condition_callback(*args, **kwargs):
                     continue
 
-            print(f"{self._current_state} -> {candidate.target} ({args!r}, {kwargs!r})")
-
-            self._current_state = candidate.target
+            self._transition_to(candidate.target)
 
             if candidate.action is None:
                 return None
@@ -58,11 +70,13 @@ class StateMachine(ABC):
             action_callback = getattr(self, candidate.action)
             return action_callback(*args, **kwargs)
 
-        if self.get_strategy() == "ignore":
-            return None
+        self.on_unhandled_event(event, *args, **kwargs)
 
-        raise UnknownTransitionError(
-            f"Unknown transition from {self._current_state!r} on {event!r} ({args!r}, {kwargs!r})"
+        return None
+
+    def on_unhandled_event(self, event: Any, *args: Any, **kwargs: Any) -> None:
+        raise UnhandledEventError(
+            f"Unhandled event: {event!r}, state: {self._current_state!r}, args: {args!r}, kwargs: {kwargs!r}"
         )
 
     def get_mermaid_diagram(self) -> str:
@@ -93,6 +107,9 @@ class StateMachine(ABC):
             transitions[(rule.source, rule.event)].append(rule)
 
         return transitions
+
+    def _transition_to(self, state: Any) -> None:
+        self._current_state = state
 
     def _get_node_name(self, state: Any) -> str:
         if isinstance(state, Enum):
