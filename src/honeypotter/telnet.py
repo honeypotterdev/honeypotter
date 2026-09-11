@@ -154,6 +154,9 @@ class TelnetOption(StateMachine):
             Rule(source=OptionState.WANTYES_OPPOSITE, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO),
         ]
 
+    def on_unhandled_event(self, event: Any, *args: Any, **kwargs: Any) -> None:
+        pass
+
     def send_enable(self) -> OptionAction:
         return OptionAction.SEND_ENABLE
 

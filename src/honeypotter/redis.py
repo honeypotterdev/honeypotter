@@ -1,10 +1,10 @@
 import logging
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
-from typing import Any, Literal
+from typing import Any
 
 from honeypotter.core import Context, Layer
-from honeypotter.statemachine import Rule, StateMachine, UnknownTransitionError
+from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
 from honeypotter.transport import DataEvent
 
 _logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ class State(Enum):
     WAIT_NULL_BULK_STRING_LF = auto()
     READ_ARRAY_LENGTH = auto()
     WAIT_ARRAY_HEADER_LF = auto()
-    ERROR = auto()
+    FAILED = auto()
 
 
 class Token(IntEnum):
@@ -58,7 +58,12 @@ class Array:
     array: list[Event]
 
 
-Event = SimpleString | BulkString | NullBulkString | Array
+@dataclass(frozen=True, kw_only=True)
+class ProtocolFailed:
+    pass
+
+
+Event = SimpleString | BulkString | NullBulkString | Array | ProtocolFailed
 
 
 class RedisProtocolParser(StateMachine):
@@ -70,14 +75,11 @@ class RedisProtocolParser(StateMachine):
         self._array_items_remaining = 0
         self._array_buffer: list[Event] = []
 
-    def get_strategy(self) -> Literal["ignore", "error"]:
-        return "error"
-
     def get_initial_state(self) -> State:
         return State.WAIT_FOR_TYPE
 
     def get_final_state(self) -> Any:
-        return State.ERROR
+        return State.FAILED
 
     def get_rules(self) -> list[Rule]:
         return [
@@ -97,9 +99,9 @@ class RedisProtocolParser(StateMachine):
             Rule(
                 source=State.READ_SIMPLE_STRING,
                 event="byte",
-                target=State.ERROR,
+                target=State.FAILED,
                 condition="is_line_feed",
-                action="error",
+                action="raise_error",
             ),
             Rule(
                 source=State.READ_SIMPLE_STRING,
@@ -197,6 +199,16 @@ class RedisProtocolParser(StateMachine):
             Rule(source=State.WAIT_ARRAY_HEADER_LF, event="byte", target=State.WAIT_FOR_TYPE, condition="is_line_feed"),
         ]
 
+    def feed_byte(self, byte: int) -> Event | None:
+        try:
+            return self.send("byte", byte)
+        except UnhandledEventError as e:
+            self._transition_to(State.FAILED)
+            raise RemoteProtocolError(f"Illegal sequence: {byte.to_bytes()}") from e
+        except RemoteProtocolError:
+            self._transition_to(State.FAILED)
+            raise
+
     def is_simple_string_prefix(self, byte: int) -> bool:
         return byte == Token.PLUS
 
@@ -262,8 +274,8 @@ class RedisProtocolParser(StateMachine):
 
         return self._accept_event(null_bull_string)
 
-    def error(self, byte: int) -> None:
-        raise RedisProtocolError(f"Illegal sequence: {byte!r}")
+    def raise_error(self, byte: int) -> None:
+        raise RemoteProtocolError(f"Illegal sequence: {byte!r}")
 
     def _accept_event(self, event: Event) -> Event | None:
         if self._array_items_remaining == 0:
@@ -281,22 +293,28 @@ class RedisProtocolParser(StateMachine):
         return array
 
 
-class RedisProtocolError(Exception):
+class RemoteProtocolError(Exception):
     pass
 
 
 class RedisProtocol:
     def __init__(self) -> None:
         self._parser = RedisProtocolParser()
+        self._error = False
 
     def receive_data(self, data: bytes) -> list[Event]:
+        if self._error:
+            return []
+
         events = []
 
         for byte in data:
             try:
-                event = self._parser.send("byte", byte)
-            except UnknownTransitionError as e:
-                raise RedisProtocolError(f"Illegal sequence: {byte.to_bytes()}") from e
+                event = self._parser.feed_byte(byte)
+            except RemoteProtocolError:
+                self._error = True
+                events.append(ProtocolFailed())
+                return events
 
             if event is not None:
                 events.append(event)
