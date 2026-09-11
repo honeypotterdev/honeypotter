@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
-from honeypotter.redis.parser import RespParseError, RespParser, RespValue
+from honeypotter.redis.parser import RespParseError, RespParser
+from honeypotter.redis.values import RespValue
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -20,7 +21,7 @@ class RedisConnection:
         if self._receive_failed:
             return []
 
-        events = []
+        events: list[ConnectionEvent] = []
 
         for byte in data:
             try:
