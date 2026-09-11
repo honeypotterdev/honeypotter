@@ -1,13 +1,8 @@
-import logging
 from dataclasses import dataclass
 from enum import Enum, IntEnum, auto
 from typing import Any
 
-from honeypotter.core import Context, Layer
 from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
-from honeypotter.transport import DataEvent
-
-_logger = logging.getLogger(__name__)
 
 
 class State(Enum):
@@ -290,74 +285,3 @@ class RespParser(StateMachine):
         self._array_buffer = []
 
         return array
-
-
-@dataclass(frozen=True, kw_only=True)
-class ProtocolErrorOccurred:
-    pass
-
-
-type ConnectionEvent = RespValue | ProtocolErrorOccurred
-
-
-class RedisConnection:
-    def __init__(self) -> None:
-        self._parser = RespParser()
-        self._receive_failed = False
-
-    def receive_data(self, data: bytes) -> list[ConnectionEvent]:
-        if self._receive_failed:
-            return []
-
-        events = []
-
-        for byte in data:
-            try:
-                event = self._parser.feed_byte(byte)
-            except RespParseError:
-                self._receive_failed = True
-                events.append(ProtocolErrorOccurred())
-                return events
-
-            if event is not None:
-                events.append(event)
-
-        return events
-
-    def send_simple_string(self, string: bytes) -> bytes:
-        return b"+" + string + b"\r\n"
-
-    def send_simple_error(self, error: bytes) -> bytes:
-        return b"-" + error + b"\r\n"
-
-
-class RedisSession(Layer):
-    def __init__(self, context: Context) -> None:
-        super().__init__(context)
-        self._connection = RedisConnection()
-
-    def handle_inbound(self, event: Any) -> None:
-        if isinstance(event, DataEvent):
-            events = self._connection.receive_data(event.data)
-
-            _logger.debug(f"Received events: {events!r}")
-
-            for protocol_event in events:
-                self._handle_event(protocol_event)
-
-            return
-
-        super().handle_inbound(event)
-
-    def _handle_event(self, event: ConnectionEvent) -> None:
-        match event:
-            case Array(array=[BulkString(string=b"PING")]):
-                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"PONG")))
-            case Array(array=[BulkString(string=b"SET"), BulkString(string=_), BulkString(string=_)]):
-                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
-            case Array(array=[BulkString(string=command)]):
-                self.ctx.send_outbound(
-                    DataEvent(data=self._connection.send_simple_error(b"ERR unknown command '" + command + b"'"))
-                )
-            case _:
-                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_error(b"ERR unknown error")))
