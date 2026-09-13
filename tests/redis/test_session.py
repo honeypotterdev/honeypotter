@@ -1,8 +1,8 @@
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 from honeypotter.core import Context
 from honeypotter.redis.session import RedisSession
-from honeypotter.transport import DataEvent, DisconnectRequestEvent
+from honeypotter.transport import DataEvent
 
 
 class TestRedisSession:
@@ -37,14 +37,3 @@ class TestRedisSession:
         layer.handle_inbound(DataEvent(data=b"*2\r\n$3\r\nFOO\r\n$3\r\nBAR\r\n"))
 
         context.send_outbound.assert_called_once_with(DataEvent(data=b"-ERR unknown command 'FOO'\r\n"))
-
-    def test_handle_inbound_unknown_event(self) -> None:
-        context = Mock(spec=Context)
-
-        layer = RedisSession(context)
-        layer.handle_inbound(DataEvent(data=b"FOO"))
-
-        assert context.send_outbound.call_args_list == [
-            call(DataEvent(data=b"-ERR unknown error\r\n")),
-            call(DisconnectRequestEvent()),
-        ]

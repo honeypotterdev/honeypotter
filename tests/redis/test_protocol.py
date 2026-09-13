@@ -9,9 +9,6 @@ class TestRedisConnection:
     def connection(self) -> RedisConnection:
         return RedisConnection()
 
-    def test_receive_data_unknown_type(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"@foo\r\b") == [ProtocolErrorOccurred()]
-
     def test_receive_data_simple_string(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+OK\r\n") == [SimpleString(string=b"OK")]
 
@@ -40,9 +37,18 @@ class TestRedisConnection:
     def test_receive_data_array_empty(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"*0\r\n") == [Array(array=[])]
 
+    def test_receive_data_inline_commands(self, connection: RedisConnection) -> None:
+        assert connection.receive_data(b"INFO\r\n") == [Array(array=[BulkString(string=b"INFO")])]
+        assert connection.receive_data(b"GET foo\r\n") == [
+            Array(array=[BulkString(string=b"GET"), BulkString(string=b"foo")])
+        ]
+        assert connection.receive_data(b"GET 'foo bar'\r\n") == [
+            Array(array=[BulkString(string=b"GET"), BulkString(string=b"foo bar")])
+        ]
+
     def test_receive_data_error_after_event(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"+OK\r\n@") == [SimpleString(string=b"OK"), ProtocolErrorOccurred()]
+        assert connection.receive_data(b"+OK\r\n+OK\n") == [SimpleString(string=b"OK"), ProtocolErrorOccurred()]
 
     def test_receive_data_no_events_after_error(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"@") == [ProtocolErrorOccurred()]
+        assert connection.receive_data(b"+OK\n") == [ProtocolErrorOccurred()]
         assert connection.receive_data(b"+OK\r\n") == []
