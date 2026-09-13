@@ -1,3 +1,4 @@
+import shlex
 from enum import Enum, IntEnum, auto
 from typing import Any
 
@@ -18,6 +19,8 @@ class State(Enum):
     WAIT_NULL_BULK_STRING_LF = auto()
     READ_ARRAY_LENGTH = auto()
     WAIT_ARRAY_HEADER_LF = auto()
+    READ_INLINE_COMMANDS = auto()
+    WAIT_INLINE_COMMANDS_LF = auto()
     FAILED = auto()
 
 
@@ -77,6 +80,7 @@ class RespParser(StateMachine):
                 condition="is_line_feed",
                 action="reject_unexpected_lf",
             ),
+            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_INLINE_COMMANDS, action="append_byte"),
             Rule(
                 source=State.READ_SIMPLE_STRING,
                 event="byte",
@@ -171,6 +175,22 @@ class RespParser(StateMachine):
                 action="parse_array_length",
             ),
             Rule(source=State.WAIT_ARRAY_HEADER_LF, event="byte", target=State.WAIT_FOR_TYPE, condition="is_line_feed"),
+            Rule(
+                source=State.READ_INLINE_COMMANDS,
+                event="byte",
+                target=State.WAIT_INLINE_COMMANDS_LF,
+                condition="is_carriage_return",
+            ),
+            Rule(
+                source=State.READ_INLINE_COMMANDS, event="byte", target=State.READ_INLINE_COMMANDS, action="append_byte"
+            ),
+            Rule(
+                source=State.WAIT_INLINE_COMMANDS_LF,
+                event="byte",
+                target=State.WAIT_FOR_TYPE,
+                condition="is_line_feed",
+                action="finish_inline_commands",
+            ),
         ]
 
     def feed_byte(self, byte: int) -> RespValue | None:
@@ -248,6 +268,14 @@ class RespParser(StateMachine):
 
     def reject_unexpected_lf(self, byte: int) -> None:
         raise RespParseError("Unexpected LF", state=self._current_state, byte=byte)
+
+    def finish_inline_commands(self, byte: int) -> RespValue:
+        commands = bytes(self._buffer)
+        self._buffer.clear()
+
+        strings = [BulkString(string=command.encode()) for command in shlex.split(commands.decode())]
+
+        return Array(array=strings)
 
     def _accept_value(self, event: RespValue) -> RespValue | None:
         if self._array_items_remaining == 0:
