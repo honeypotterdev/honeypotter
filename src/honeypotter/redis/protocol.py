@@ -41,3 +41,6 @@ class RedisConnection:
 
     def send_simple_error(self, error: bytes) -> bytes:
         return b"-" + error + b"\r\n"
+
+    def send_bulk_string(self, string: bytes) -> bytes:
+        return b"$" + str(len(string)).encode() + b"\r\n" + string + b"\r\n"
