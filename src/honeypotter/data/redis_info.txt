@@ -14,18 +14,18 @@ process_id:9035
 process_supervised:systemd
 run_id:9ff92323fc209c2d3bf85436f0f760057abcef0a
 tcp_port:6379
-server_time_usec:1789311631968336
-uptime_in_seconds:85
-uptime_in_days:0
+server_time_usec:{server_time_use}
+uptime_in_seconds:{uptime_in_seconds}
+uptime_in_days:{uptime_in_days}
 hz:10
 configured_hz:10
-lru_clock:10926735
+lru_clock:10931515
 executable:/usr/bin/redis-server
 config_file:/etc/redis/redis.conf
 io_threads_active:0
 
 # Clients
-connected_clients:1
+connected_clients:{connected_clients}
 cluster_connections:0
 maxclients:10000
 client_recent_max_input_buffer:20480
@@ -35,20 +35,20 @@ tracking_clients:0
 clients_in_timeout_table:0
 
 # Memory
-used_memory:926192
-used_memory_human:904.48K
-used_memory_rss:14155776
-used_memory_rss_human:13.50M
-used_memory_peak:1103240
-used_memory_peak_human:1.05M
-used_memory_peak_perc:83.95%
-used_memory_overhead:898568
+used_memory:1850464
+used_memory_human:1.76M
+used_memory_rss:13672448
+used_memory_rss_human:13.04M
+used_memory_peak:4038272
+used_memory_peak_human:3.85M
+used_memory_peak_perc:45.82%
+used_memory_overhead:898760
 used_memory_startup:876096
-used_memory_dataset:27624
-used_memory_dataset_perc:55.14%
-allocator_allocated:2103648
-allocator_active:2318336
-allocator_resident:4726784
+used_memory_dataset:951704
+used_memory_dataset_perc:97.67%
+allocator_allocated:2730928
+allocator_active:3203072
+allocator_resident:5640192
 total_system_memory:480497664
 total_system_memory_human:458.24M
 used_memory_lua:31744
@@ -67,14 +67,14 @@ used_memory_scripts_human:200B
 maxmemory:0
 maxmemory_human:0B
 maxmemory_policy:noeviction
-allocator_frag_ratio:1.10
-allocator_frag_bytes:214688
-allocator_rss_ratio:2.04
-allocator_rss_bytes:2408448
-rss_overhead_ratio:2.99
-rss_overhead_bytes:9428992
-mem_fragmentation_ratio:15.33
-mem_fragmentation_bytes:13232104
+allocator_frag_ratio:1.17
+allocator_frag_bytes:472144
+allocator_rss_ratio:1.76
+allocator_rss_bytes:2437120
+rss_overhead_ratio:2.42
+rss_overhead_bytes:8032256
+mem_fragmentation_ratio:7.40
+mem_fragmentation_bytes:11823816
 mem_not_counted_for_evict:0
 mem_replication_backlog:0
 mem_total_replication_buffers:0
@@ -98,12 +98,12 @@ current_save_keys_processed:0
 current_save_keys_total:0
 rdb_changes_since_last_save:0
 rdb_bgsave_in_progress:0
-rdb_last_save_time:1789311546
+rdb_last_save_time:1789316194
 rdb_last_bgsave_status:ok
-rdb_last_bgsave_time_sec:-1
+rdb_last_bgsave_time_sec:0
 rdb_current_bgsave_time_sec:-1
-rdb_saves:0
-rdb_last_cow_size:0
+rdb_saves:3
+rdb_last_cow_size:765952
 rdb_last_load_keys_expired:0
 rdb_last_load_keys_loaded:0
 aof_enabled:0
@@ -120,15 +120,15 @@ module_fork_in_progress:0
 module_fork_last_cow_size:0
 
 # Stats
-total_connections_received:1
-total_commands_processed:1
+total_connections_received:1003
+total_commands_processed:2000005
 instantaneous_ops_per_sec:0
-total_net_input_bytes:41
-total_net_output_bytes:172298
+total_net_input_bytes:104000159
+total_net_output_bytes:1363216336
 total_net_repl_input_bytes:0
 total_net_repl_output_bytes:0
-instantaneous_input_kbps:0.00
-instantaneous_output_kbps:0.00
+instantaneous_input_kbps:0.02
+instantaneous_output_kbps:103.10
 instantaneous_input_repl_kbps:0.00
 instantaneous_output_repl_kbps:0.00
 rejected_connections:0
@@ -138,18 +138,18 @@ sync_partial_err:0
 expired_keys:0
 expired_stale_perc:0.00
 expired_time_cap_reached_count:0
-expire_cycle_cpu_milliseconds:1
+expire_cycle_cpu_milliseconds:112
 evicted_keys:0
 evicted_clients:0
 total_eviction_exceeded_time:0
 current_eviction_exceeded_time:0
-keyspace_hits:0
+keyspace_hits:500000
 keyspace_misses:0
 pubsub_channels:0
 pubsub_patterns:0
 pubsubshard_channels:0
-latest_fork_usec:0
-total_forks:0
+latest_fork_usec:509
+total_forks:3
 migrate_cached_sockets:0
 slave_expires_tracked_keys:0
 active_defrag_hits:0
@@ -164,12 +164,12 @@ tracking_total_prefixes:0
 unexpected_error_replies:0
 total_error_replies:0
 dump_payload_sanitizations:0
-total_reads_processed:2
-total_writes_processed:3
+total_reads_processed:2001007
+total_writes_processed:2000008
 io_threaded_reads_processed:0
 io_threaded_writes_processed:0
-reply_buffer_shrinks:1
-reply_buffer_expands:0
+reply_buffer_shrinks:1003
+reply_buffer_expands:1
 
 # Replication
 role:master
@@ -185,12 +185,12 @@ repl_backlog_first_byte_offset:0
 repl_backlog_histlen:0
 
 # CPU
-used_cpu_sys:0.127521
-used_cpu_user:0.148858
-used_cpu_sys_children:0.000000
-used_cpu_user_children:0.000814
-used_cpu_sys_main_thread:0.127441
-used_cpu_user_main_thread:0.148681
+used_cpu_sys:23.797652
+used_cpu_user:34.826950
+used_cpu_sys_children:0.008160
+used_cpu_user_children:0.006557
+used_cpu_sys_main_thread:23.796346
+used_cpu_user_main_thread:34.826025
 
 # Modules
 
@@ -200,3 +200,4 @@ used_cpu_user_main_thread:0.148681
 cluster_enabled:0
 
 # Keyspace
+db0:keys=4,expires=0,avg_ttl=0
