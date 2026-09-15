@@ -185,12 +185,12 @@ repl_backlog_first_byte_offset:0
 repl_backlog_histlen:0
 
 # CPU
-used_cpu_sys:23.797652
-used_cpu_user:34.826950
-used_cpu_sys_children:0.008160
-used_cpu_user_children:0.006557
-used_cpu_sys_main_thread:23.796346
-used_cpu_user_main_thread:34.826025
+used_cpu_sys:{used_cpu_sys}
+used_cpu_user:{used_cpu_user}
+used_cpu_sys_children:{used_cpu_sys_children}
+used_cpu_user_children:{used_cpu_user_children}
+used_cpu_sys_main_thread:{used_cpu_sys_main_thread}
+used_cpu_user_main_thread:{used_cpu_user_main_thread}
 
 # Modules
 

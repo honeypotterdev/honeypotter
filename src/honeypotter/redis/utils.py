@@ -52,6 +52,8 @@ class InfoProvider:
         allocator_allocated = self._allocator_allocated(used_memory)
         allocator_active = self._allocator_active(allocator_allocated)
         allocator_resident = self._allocator_resident(allocator_active)
+        used_cpu_sys = self._used_cpu_sys(uptime_in_seconds)
+        used_cpu_user = self._used_cpu_user(uptime_in_seconds)
 
         return _redis_info.format(
             run_id=self._run_id,
@@ -102,6 +104,12 @@ class InfoProvider:
             total_forks=self._rdb_saves,
             total_reads_processed=total_commands_processed,
             total_writes_processed=total_commands_processed,
+            used_cpu_sys=f"{used_cpu_sys:.6f}",
+            used_cpu_user=f"{used_cpu_user:.6f}",
+            used_cpu_sys_children=self._used_cpu_sys_children(),
+            used_cpu_user_children=self._used_cpu_user_children(),
+            used_cpu_sys_main_thread=self._used_cpu_sys_main_thread(used_cpu_sys),
+            used_cpu_user_main_thread=self._used_cpu_user_main_thread(used_cpu_user),
         )
 
     def _now(self) -> datetime:
@@ -217,3 +225,23 @@ class InfoProvider:
 
     def _instantaneous_output_kbps(self) -> str:
         return f"{self._commands_per_second * self._average_response_bytes / 1024:.2f}"
+
+    # CPU
+
+    def _used_cpu_sys(self, uptime_in_seconds: int) -> float:
+        return uptime_in_seconds * 0.0002
+
+    def _used_cpu_user(self, uptime_in_seconds: int) -> float:
+        return uptime_in_seconds * 0.0005
+
+    def _used_cpu_sys_children(self) -> str:
+        return f"{self._rdb_saves * 0.02:.6f}"
+
+    def _used_cpu_user_children(self) -> str:
+        return f"{self._rdb_saves * 0.1:.6f}"
+
+    def _used_cpu_sys_main_thread(self, used_cpu_sys: float) -> str:
+        return f"{used_cpu_sys * 0.99:.6f}"
+
+    def _used_cpu_user_main_thread(self, used_cpu_user: float) -> str:
+        return f"{used_cpu_user * 0.99:.6f}"
