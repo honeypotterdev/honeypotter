@@ -26,6 +26,7 @@ class InfoProvider:
         self._start = datetime.now(tz=UTC) - timedelta(days=30)
         self._process_id = random.randint(9_000, 10_000)
         self._run_id = secrets.token_hex(20)
+        self._master_replid = secrets.token_hex(20)
         self._rss_overhead = random.randint(5 * 1024**2, 10 * 1024**2)
         self._used_memory_peak = random.randint(60 * 1024**2, 70 * 1024**2)
         self._used_memory_startup = 876_096
@@ -87,6 +88,7 @@ class InfoProvider:
             rss_overhead_bytes=self._rss_overhead_bytes(allocator_resident, used_memory_rss),
             mem_fragmentation_ratio=self._mem_fragmentation_ratio(used_memory, used_memory_rss),
             mem_fragmentation_bytes=self._mem_fragmentation_bytes(used_memory, used_memory_rss),
+            rdb_changes_since_last_save=self._rdb_changes_since_last_save(now),
             rdb_last_save_time=self._rdb_last_save_time,
             rdb_last_bgsave_time_sec=self._rdb_last_bgsave_time_sec,
             rdb_saves=self._rdb_saves,
@@ -104,6 +106,7 @@ class InfoProvider:
             total_forks=self._rdb_saves,
             total_reads_processed=total_commands_processed,
             total_writes_processed=total_commands_processed,
+            master_replid=self._master_replid,
             used_cpu_sys=f"{used_cpu_sys:.6f}",
             used_cpu_user=f"{used_cpu_user:.6f}",
             used_cpu_sys_children=self._used_cpu_sys_children(),
@@ -192,6 +195,11 @@ class InfoProvider:
         return used_memory_rss - used_memory
 
     # Persistence
+
+    def _rdb_changes_since_last_save(self, now: datetime) -> int:
+        seconds_since_last_save = int(now.timestamp()) - self._rdb_last_save_time
+        commands_since_last_save = self._total_commands_processed(seconds_since_last_save)
+        return commands_since_last_save - self._get_commands(commands_since_last_save)
 
     def _random_rdb_last_save_time(self) -> int:
         last_save = self._start + timedelta(days=29, seconds=random.randint(0, 23 * 60 * 60))

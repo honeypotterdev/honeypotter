@@ -96,7 +96,7 @@ current_cow_size_age:0
 current_fork_perc:0.00
 current_save_keys_processed:0
 current_save_keys_total:0
-rdb_changes_since_last_save:0
+rdb_changes_since_last_save:{rdb_changes_since_last_save}
 rdb_bgsave_in_progress:0
 rdb_last_save_time:{rdb_last_save_time}
 rdb_last_bgsave_status:ok
@@ -175,7 +175,7 @@ reply_buffer_expands:1
 role:master
 connected_slaves:0
 master_failover_state:no-failover
-master_replid:5a72c5c2fdb92aac4c0b483c21479613761077f1
+master_replid:{master_replid}
 master_replid2:0000000000000000000000000000000000000000
 master_repl_offset:0
 second_repl_offset:-1
