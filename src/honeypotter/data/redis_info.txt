@@ -121,14 +121,14 @@ module_fork_last_cow_size:0
 
 # Stats
 total_connections_received:1003
-total_commands_processed:2000005
-instantaneous_ops_per_sec:0
-total_net_input_bytes:104000159
-total_net_output_bytes:1363216336
+total_commands_processed:{total_commands_processed}
+instantaneous_ops_per_sec:{instantaneous_ops_per_sec}
+total_net_input_bytes:{total_net_input_bytes}
+total_net_output_bytes:{total_net_output_bytes}
 total_net_repl_input_bytes:0
 total_net_repl_output_bytes:0
-instantaneous_input_kbps:0.02
-instantaneous_output_kbps:103.10
+instantaneous_input_kbps:{instantaneous_input_kbps}
+instantaneous_output_kbps:{instantaneous_output_kbps}
 instantaneous_input_repl_kbps:0.00
 instantaneous_output_repl_kbps:0.00
 rejected_connections:0

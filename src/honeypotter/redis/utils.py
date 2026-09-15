@@ -36,9 +36,14 @@ class InfoProvider:
         self._rdb_last_bgsave_time_sec = random.randint(0, 2)
         self._rdb_last_cow_size = random.randint(128, 512) * 4096
         self._latest_fork_usec = random.randint(200, 2_000)
+        self._commands_per_second = 5
+        self._average_request_bytes = 60
+        self._average_response_bytes = 100
 
     def generate_info(self) -> str:
         now = self._now()
+        uptime_in_seconds = self._uptime_in_seconds(now)
+        total_commands_processed = self._total_commands_processed(uptime_in_seconds)
         used_memory = self._random_used_memory()
         used_memory_rss = self._used_memory_rss(used_memory)
         used_memory_dataset = self._used_memory_dataset(used_memory)
@@ -50,7 +55,7 @@ class InfoProvider:
             run_id=self._run_id,
             process_id=self._process_id,
             server_time_usec=self._server_time_usec(now),
-            uptime_in_seconds=self._uptime_in_seconds(now),
+            uptime_in_seconds=uptime_in_seconds,
             uptime_in_days=self._uptime_in_days(now),
             lru_clock=self._lru_clock(now),
             connected_clients=self._random_connected_clients(),
@@ -82,6 +87,12 @@ class InfoProvider:
             rdb_last_bgsave_time_sec=self._rdb_last_bgsave_time_sec,
             rdb_saves=self._rdb_saves,
             rdb_last_cow_size=self._rdb_last_cow_size,
+            total_commands_processed=total_commands_processed,
+            instantaneous_ops_per_sec=self._commands_per_second,
+            total_net_input_bytes=self._total_net_input_bytes(total_commands_processed),
+            total_net_output_bytes=self._total_net_output_bytes(total_commands_processed),
+            instantaneous_input_kbps=self._instantaneous_input_kbps(),
+            instantaneous_output_kbps=self._instantaneous_output_kbps(),
             latest_fork_usec=self._latest_fork_usec,
             total_forks=self._rdb_saves,
         )
@@ -170,3 +181,20 @@ class InfoProvider:
     def _random_rdb_last_save_time(self) -> int:
         last_save = self._start + timedelta(days=29, seconds=random.randint(0, 23 * 60 * 60))
         return int(last_save.timestamp())
+
+    # Stats
+
+    def _total_commands_processed(self, uptime_in_seconds: int) -> int:
+        return uptime_in_seconds * self._commands_per_second
+
+    def _total_net_input_bytes(self, total_commands_processed: int) -> int:
+        return total_commands_processed * self._average_request_bytes
+
+    def _total_net_output_bytes(self, total_commands_processed: int) -> int:
+        return total_commands_processed * self._average_response_bytes
+
+    def _instantaneous_input_kbps(self) -> str:
+        return f"{self._commands_per_second * self._average_request_bytes / 1024:.2f}"
+
+    def _instantaneous_output_kbps(self) -> str:
+        return f"{self._commands_per_second * self._average_response_bytes / 1024:.2f}"
