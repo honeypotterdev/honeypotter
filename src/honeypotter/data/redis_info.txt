@@ -120,7 +120,7 @@ module_fork_in_progress:0
 module_fork_last_cow_size:0
 
 # Stats
-total_connections_received:1003
+total_connections_received:{total_connections_received}
 total_commands_processed:{total_commands_processed}
 instantaneous_ops_per_sec:{instantaneous_ops_per_sec}
 total_net_input_bytes:{total_net_input_bytes}
@@ -143,8 +143,8 @@ evicted_keys:0
 evicted_clients:0
 total_eviction_exceeded_time:0
 current_eviction_exceeded_time:0
-keyspace_hits:500000
-keyspace_misses:0
+keyspace_hits:{keyspace_hits}
+keyspace_misses:{keyspace_misses}
 pubsub_channels:0
 pubsub_patterns:0
 pubsubshard_channels:0
@@ -164,8 +164,8 @@ tracking_total_prefixes:0
 unexpected_error_replies:0
 total_error_replies:0
 dump_payload_sanitizations:0
-total_reads_processed:2001007
-total_writes_processed:2000008
+total_reads_processed:{total_reads_processed}
+total_writes_processed:{total_writes_processed}
 io_threaded_reads_processed:0
 io_threaded_writes_processed:0
 reply_buffer_shrinks:1003

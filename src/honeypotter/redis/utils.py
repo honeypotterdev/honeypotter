@@ -44,6 +44,8 @@ class InfoProvider:
         now = self._now()
         uptime_in_seconds = self._uptime_in_seconds(now)
         total_commands_processed = self._total_commands_processed(uptime_in_seconds)
+        get_commands = self._get_commands(total_commands_processed)
+        keyspace_hits = self._keyspace_hits(get_commands)
         used_memory = self._random_used_memory()
         used_memory_rss = self._used_memory_rss(used_memory)
         used_memory_dataset = self._used_memory_dataset(used_memory)
@@ -87,14 +89,19 @@ class InfoProvider:
             rdb_last_bgsave_time_sec=self._rdb_last_bgsave_time_sec,
             rdb_saves=self._rdb_saves,
             rdb_last_cow_size=self._rdb_last_cow_size,
+            total_connections_received=self._total_connections_received(uptime_in_seconds),
             total_commands_processed=total_commands_processed,
             instantaneous_ops_per_sec=self._commands_per_second,
             total_net_input_bytes=self._total_net_input_bytes(total_commands_processed),
             total_net_output_bytes=self._total_net_output_bytes(total_commands_processed),
             instantaneous_input_kbps=self._instantaneous_input_kbps(),
             instantaneous_output_kbps=self._instantaneous_output_kbps(),
+            keyspace_hits=keyspace_hits,
+            keyspace_misses=self._keyspace_misses(get_commands, keyspace_hits),
             latest_fork_usec=self._latest_fork_usec,
             total_forks=self._rdb_saves,
+            total_reads_processed=total_commands_processed,
+            total_writes_processed=total_commands_processed,
         )
 
     def _now(self) -> datetime:
@@ -184,8 +191,20 @@ class InfoProvider:
 
     # Stats
 
+    def _total_connections_received(self, uptime_in_seconds: int) -> int:
+        return uptime_in_seconds // 60
+
     def _total_commands_processed(self, uptime_in_seconds: int) -> int:
         return uptime_in_seconds * self._commands_per_second
+
+    def _get_commands(self, total_commands_processed: int) -> int:
+        return total_commands_processed * 80 // 100
+
+    def _keyspace_hits(self, get_commands: int) -> int:
+        return get_commands * 95 // 100
+
+    def _keyspace_misses(self, get_commands: int, keyspace_hits: int) -> int:
+        return get_commands - keyspace_hits
 
     def _total_net_input_bytes(self, total_commands_processed: int) -> int:
         return total_commands_processed * self._average_request_bytes
