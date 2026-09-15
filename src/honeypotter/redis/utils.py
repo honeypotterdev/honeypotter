@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 _data_dir = Path(__file__).parent.parent / "data"
-_redis_info = (_data_dir / "redis_info.txt").read_text(encoding="utf-8").strip() + "\n"
+_redis_info = (_data_dir / "redis_info.txt").read_text(encoding="utf-8").strip() + "\r\n"
 
 
 def bytes_to_human(value: float) -> str:
@@ -28,34 +28,36 @@ class InfoProvider:
         self._run_id = secrets.token_hex(20)
 
     def generate_info(self) -> str:
+        now = self._now()
         used_memory = self._used_memory()
 
         return _redis_info.format(
             run_id=self._run_id,
             process_id=self._process_id,
-            server_time_use=self._server_time_usec(),
-            uptime_in_seconds=self._uptime_in_seconds(),
-            uptime_in_days=self._uptime_in_days(),
+            server_time_usec=self._server_time_usec(now),
+            uptime_in_seconds=self._uptime_in_seconds(now),
+            uptime_in_days=self._uptime_in_days(now),
             connected_clients=self._connected_clients(),
             used_memory=used_memory,
             used_memory_human=bytes_to_human(used_memory),
         )
 
+    def _now(self) -> datetime:
+        return datetime.now(tz=UTC)
+
     # Server
 
-    # TODO: Implement "run_id"
+    def _server_time_usec(self, now: datetime) -> int:
+        return int(now.timestamp() * 1_000_000)
 
-    def _server_time_usec(self) -> int:
-        return int(datetime.now(tz=UTC).timestamp() * 1_000_000)
+    def _uptime(self, now: datetime) -> timedelta:
+        return now - self._start
 
-    def _uptime(self) -> timedelta:
-        return datetime.now(tz=UTC) - self._start
+    def _uptime_in_seconds(self, now: datetime) -> int:
+        return int(self._uptime(now).total_seconds())
 
-    def _uptime_in_seconds(self) -> int:
-        return int(self._uptime().total_seconds())
-
-    def _uptime_in_days(self) -> int:
-        return int(self._uptime().days)
+    def _uptime_in_days(self, now: datetime) -> int:
+        return int(self._uptime(now).days)
 
     # TODO: Implement "lru_clock"
 

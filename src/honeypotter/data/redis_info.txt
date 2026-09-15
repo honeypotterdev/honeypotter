@@ -14,7 +14,7 @@ process_id:{process_id}
 process_supervised:systemd
 run_id:{run_id}
 tcp_port:6379
-server_time_usec:{server_time_use}
+server_time_usec:{server_time_usec}
 uptime_in_seconds:{uptime_in_seconds}
 uptime_in_days:{uptime_in_days}
 hz:10
