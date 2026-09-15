@@ -1,5 +1,6 @@
 import random
 import secrets
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -21,6 +22,15 @@ def bytes_to_human(value: float) -> str:
     return f"{value}B"
 
 
+@dataclass(frozen=True)
+class DatabaseInfo:
+    keys: int
+    average_key_bytes: int
+    average_value_bytes: int
+    expires: int = 0
+    avg_ttl: int = 0
+
+
 class InfoProvider:
     def __init__(self) -> None:
         self._start = datetime.now(tz=UTC) - timedelta(days=30)
@@ -28,9 +38,18 @@ class InfoProvider:
         self._run_id = secrets.token_hex(20)
         self._master_replid = secrets.token_hex(20)
         self._rss_overhead = random.randint(5 * 1024**2, 10 * 1024**2)
-        self._used_memory_peak = random.randint(60 * 1024**2, 70 * 1024**2)
         self._used_memory_startup = 876_096
-        self._used_memory_overhead = 898_760
+        self._databases = self._random_databases()
+        # Estimate 48 bytes per key, plus 32 bytes per expiration-table entry.
+        self._used_memory_overhead = (
+            self._used_memory_startup
+            + 22_272
+            + 200
+            + sum(database.keys * 48 + database.expires * 32 for database in self._databases)
+        )
+        self._used_memory_peak = self._used_memory(self._used_memory_dataset()) + random.randint(
+            10 * 1024**2, 15 * 1024**2
+        )
         self._total_system_memory = self._random_total_system_memory()
         self._rdb_last_save_time = self._random_rdb_last_save_time()
         self._rdb_saves = random.randint(3, 30)
@@ -47,9 +66,9 @@ class InfoProvider:
         total_commands_processed = self._total_commands_processed(uptime_in_seconds)
         get_commands = self._get_commands(total_commands_processed)
         keyspace_hits = self._keyspace_hits(get_commands)
-        used_memory = self._random_used_memory()
+        used_memory_dataset = self._used_memory_dataset()
+        used_memory = self._used_memory(used_memory_dataset)
         used_memory_rss = self._used_memory_rss(used_memory)
-        used_memory_dataset = self._used_memory_dataset(used_memory)
         allocator_allocated = self._allocator_allocated(used_memory)
         allocator_active = self._allocator_active(allocator_allocated)
         allocator_resident = self._allocator_resident(allocator_active)
@@ -100,6 +119,7 @@ class InfoProvider:
             total_net_output_bytes=self._total_net_output_bytes(total_commands_processed),
             instantaneous_input_kbps=self._instantaneous_input_kbps(),
             instantaneous_output_kbps=self._instantaneous_output_kbps(),
+            expired_keys=self._expired_keys(uptime_in_seconds),
             keyspace_hits=keyspace_hits,
             keyspace_misses=self._keyspace_misses(get_commands, keyspace_hits),
             latest_fork_usec=self._latest_fork_usec,
@@ -113,6 +133,7 @@ class InfoProvider:
             used_cpu_user_children=self._used_cpu_user_children(),
             used_cpu_sys_main_thread=self._used_cpu_sys_main_thread(used_cpu_sys),
             used_cpu_user_main_thread=self._used_cpu_user_main_thread(used_cpu_user),
+            keyspace=self._keyspace(),
         )
 
     def _now(self) -> datetime:
@@ -142,8 +163,8 @@ class InfoProvider:
 
     # Memory
 
-    def _random_used_memory(self) -> int:
-        return random.randint(1024**2 * 50, 1024**2 * 55)
+    def _used_memory(self, used_memory_dataset: int) -> int:
+        return used_memory_dataset + self._used_memory_overhead
 
     def _used_memory_rss(self, used_memory: int) -> int:
         return used_memory + self._rss_overhead
@@ -151,8 +172,12 @@ class InfoProvider:
     def _used_memory_peak_perc(self, used_memory: int) -> str:
         return f"{100 * used_memory / self._used_memory_peak:.2f}%"
 
-    def _used_memory_dataset(self, used_memory: int) -> int:
-        return used_memory - self._used_memory_overhead
+    def _used_memory_dataset(self) -> int:
+        # Include an estimated 16 bytes per pair for string headers and allocation padding.
+        return sum(
+            database.keys * (database.average_key_bytes + database.average_value_bytes + 16)
+            for database in self._databases
+        )
 
     def _used_memory_dataset_perc(self, used_memory: int, used_memory_dataset: int) -> str:
         return f"{100 * used_memory_dataset / (used_memory - self._used_memory_startup):.2f}%"
@@ -199,13 +224,27 @@ class InfoProvider:
     def _rdb_changes_since_last_save(self, now: datetime) -> int:
         seconds_since_last_save = int(now.timestamp()) - self._rdb_last_save_time
         commands_since_last_save = self._total_commands_processed(seconds_since_last_save)
-        return commands_since_last_save - self._get_commands(commands_since_last_save)
+        return (
+            commands_since_last_save
+            - self._get_commands(commands_since_last_save)
+            + self._expired_keys(seconds_since_last_save)
+        )
 
     def _random_rdb_last_save_time(self) -> int:
         last_save = self._start + timedelta(days=29, seconds=random.randint(0, 23 * 60 * 60))
         return int(last_save.timestamp())
 
     # Stats
+
+    def _expired_keys(self, elapsed_seconds: int) -> int:
+        # Steady cache turnover: average remaining TTL is half the modeled lifetime.
+        return int(
+            sum(
+                elapsed_seconds * database.expires * 1000 / (2 * database.avg_ttl)
+                for database in self._databases
+                if database.expires
+            )
+        )
 
     def _total_connections_received(self, uptime_in_seconds: int) -> int:
         return uptime_in_seconds // 60
@@ -253,3 +292,22 @@ class InfoProvider:
 
     def _used_cpu_user_main_thread(self, used_cpu_user: float) -> str:
         return f"{used_cpu_user * 0.99:.6f}"
+
+    # Keyspace
+
+    def _random_databases(self) -> tuple[DatabaseInfo, ...]:
+        db1_keys = random.randint(32_000, 34_000)
+        db3_keys = random.randint(3_000, 3_200)
+        return (
+            DatabaseInfo(random.randint(90_000, 95_000), 16, random.randint(64, 80)),
+            DatabaseInfo(db1_keys, 24, random.randint(192, 224), db1_keys, random.randint(18, 24) * 3_600_000),
+            DatabaseInfo(random.randint(12_000, 13_000), 32, random.randint(512, 576)),
+            DatabaseInfo(db3_keys, 40, random.randint(2_048, 2_304), db3_keys, random.randint(60, 90) * 60_000),
+            DatabaseInfo(random.randint(800, 900), 48, random.randint(8_192, 9_216)),
+        )
+
+    def _keyspace(self) -> str:
+        return "\r\n".join(
+            f"db{index}:keys={database.keys},expires={database.expires},avg_ttl={database.avg_ttl}"
+            for index, database in enumerate(self._databases)
+        )

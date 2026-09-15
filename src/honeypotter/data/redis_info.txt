@@ -135,7 +135,7 @@ rejected_connections:0
 sync_full:0
 sync_partial_ok:0
 sync_partial_err:0
-expired_keys:0
+expired_keys:{expired_keys}
 expired_stale_perc:0.00
 expired_time_cap_reached_count:0
 expire_cycle_cpu_milliseconds:112
@@ -200,4 +200,4 @@ used_cpu_user_main_thread:{used_cpu_user_main_thread}
 cluster_enabled:0
 
 # Keyspace
-db0:keys=4,expires=0,avg_ttl=0
+{keyspace}
