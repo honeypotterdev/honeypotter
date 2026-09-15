@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 _data_dir = Path(__file__).parent.parent / "data"
-_redis_info = (_data_dir / "redis_info.txt").read_text(encoding="utf-8").strip() + "\r\n"
+_redis_info = "\r\n".join((_data_dir / "redis_info.txt").read_text(encoding="utf-8").splitlines()) + "\r\n"
 
 
 def bytes_to_human(value: float) -> str:
