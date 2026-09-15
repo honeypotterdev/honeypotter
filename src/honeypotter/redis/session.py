@@ -4,7 +4,7 @@ from typing import Any
 from honeypotter.core import Context, Layer
 from honeypotter.redis.protocol import ConnectionEvent, RedisConnection
 from honeypotter.redis.utils import InfoProvider
-from honeypotter.redis.values import Array, BulkString
+from honeypotter.redis.values import Array, BulkString, RespValue
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
@@ -31,17 +31,22 @@ class RedisSession(Layer):
 
     def _handle_event(self, event: ConnectionEvent) -> None:
         match event:
-            case Array(array=[BulkString(string=b"PING")]):
-                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"PONG")))
-            case Array(array=[BulkString(string=b"INFO")]):
-                info = _info_provider.generate_info().encode("utf-8")
-                self.ctx.send_outbound(DataEvent(data=self._connection.send_bulk_string(info)))
-            case Array(array=[BulkString(string=b"SET"), BulkString(string=_), BulkString(string=_)]):
-                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
-            case Array(array=[BulkString(string=command), *_rest]):
-                self.ctx.send_outbound(
-                    DataEvent(data=self._connection.send_simple_error(b"ERR unknown command '" + command + b"'"))
-                )
+            case Array(array=[BulkString(string=command), *args]):
+                self._handle_command(command, args)
             case _:
                 self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_error(b"ERR unknown error")))
                 self.ctx.send_outbound(DisconnectRequestEvent())
+
+    def _handle_command(self, command: bytes, args: list[RespValue]) -> None:
+        match command.upper(), args:
+            case b"PING", []:
+                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"PONG")))
+            case b"INFO", []:
+                info = _info_provider.generate_info().encode("utf-8")
+                self.ctx.send_outbound(DataEvent(data=self._connection.send_bulk_string(info)))
+            case b"SET", [BulkString(string=_), BulkString(string=_)]:
+                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+            case _:
+                self.ctx.send_outbound(
+                    DataEvent(data=self._connection.send_simple_error(b"ERR unknown command '" + command + b"'"))
+                )
