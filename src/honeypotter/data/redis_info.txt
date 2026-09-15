@@ -46,11 +46,11 @@ used_memory_overhead:{used_memory_overhead}
 used_memory_startup:{used_memory_startup}
 used_memory_dataset:{used_memory_dataset}
 used_memory_dataset_perc:{used_memory_dataset_perc}
-allocator_allocated:2730928
-allocator_active:3203072
-allocator_resident:5640192
-total_system_memory:480497664
-total_system_memory_human:458.24M
+allocator_allocated:{allocator_allocated}
+allocator_active:{allocator_active}
+allocator_resident:{allocator_resident}
+total_system_memory:{total_system_memory}
+total_system_memory_human:{total_system_memory_human}
 used_memory_lua:31744
 used_memory_vm_eval:31744
 used_memory_lua_human:31.00K

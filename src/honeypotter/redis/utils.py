@@ -30,12 +30,15 @@ class InfoProvider:
         self._used_memory_peak = random.randint(60 * 1024**2, 70 * 1024**2)
         self._used_memory_startup = 876_096
         self._used_memory_overhead = 898_760
+        self._total_system_memory = self._random_total_system_memory()
 
     def generate_info(self) -> str:
         now = self._now()
         used_memory = self._random_used_memory()
         used_memory_rss = self._used_memory_rss(used_memory)
         used_memory_dataset = self._used_memory_dataset(used_memory)
+        allocator_allocated = self._allocator_allocated(used_memory)
+        allocator_active = self._allocator_active(allocator_allocated)
 
         return _redis_info.format(
             run_id=self._run_id,
@@ -56,6 +59,11 @@ class InfoProvider:
             used_memory_startup=self._used_memory_startup,
             used_memory_dataset=used_memory_dataset,
             used_memory_dataset_perc=self._used_memory_dataset_perc(used_memory, used_memory_dataset),
+            allocator_allocated=allocator_allocated,
+            allocator_active=allocator_active,
+            allocator_resident=self._allocator_resident(allocator_active),
+            total_system_memory=self._total_system_memory,
+            total_system_memory_human=bytes_to_human(self._total_system_memory),
         )
 
     def _now(self) -> datetime:
@@ -99,3 +107,16 @@ class InfoProvider:
 
     def _used_memory_dataset_perc(self, used_memory: int, used_memory_dataset: int) -> str:
         return f"{100 * used_memory_dataset / (used_memory - self._used_memory_startup):.2f}%"
+
+    def _allocator_allocated(self, used_memory: int) -> int:
+        return used_memory + self._rss_overhead // 10
+
+    def _allocator_active(self, allocator_allocated: int) -> int:
+        return allocator_allocated + self._rss_overhead // 4
+
+    def _allocator_resident(self, allocator_active: int) -> int:
+        return allocator_active + self._rss_overhead // 3
+
+    def _random_total_system_memory(self) -> int:
+        reserved_pages = random.randint(64 * 1024**2 // 4096, 128 * 1024**2 // 4096)
+        return 2 * 1024**3 - reserved_pages * 4096
