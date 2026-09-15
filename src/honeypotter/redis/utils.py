@@ -31,6 +31,11 @@ class InfoProvider:
         self._used_memory_startup = 876_096
         self._used_memory_overhead = 898_760
         self._total_system_memory = self._random_total_system_memory()
+        self._rdb_last_save_time = self._random_rdb_last_save_time()
+        self._rdb_saves = random.randint(3, 30)
+        self._rdb_last_bgsave_time_sec = random.randint(0, 2)
+        self._rdb_last_cow_size = random.randint(128, 512) * 4096
+        self._latest_fork_usec = random.randint(200, 2_000)
 
     def generate_info(self) -> str:
         now = self._now()
@@ -73,6 +78,12 @@ class InfoProvider:
             rss_overhead_bytes=self._rss_overhead_bytes(allocator_resident, used_memory_rss),
             mem_fragmentation_ratio=self._mem_fragmentation_ratio(used_memory, used_memory_rss),
             mem_fragmentation_bytes=self._mem_fragmentation_bytes(used_memory, used_memory_rss),
+            rdb_last_save_time=self._rdb_last_save_time,
+            rdb_last_bgsave_time_sec=self._rdb_last_bgsave_time_sec,
+            rdb_saves=self._rdb_saves,
+            rdb_last_cow_size=self._rdb_last_cow_size,
+            latest_fork_usec=self._latest_fork_usec,
+            total_forks=self._rdb_saves,
         )
 
     def _now(self) -> datetime:
@@ -153,3 +164,9 @@ class InfoProvider:
 
     def _mem_fragmentation_bytes(self, used_memory: int, used_memory_rss: int) -> int:
         return used_memory_rss - used_memory
+
+    # Persistence
+
+    def _random_rdb_last_save_time(self) -> int:
+        last_save = self._start + timedelta(days=29, seconds=random.randint(0, 23 * 60 * 60))
+        return int(last_save.timestamp())

@@ -98,12 +98,12 @@ current_save_keys_processed:0
 current_save_keys_total:0
 rdb_changes_since_last_save:0
 rdb_bgsave_in_progress:0
-rdb_last_save_time:1789316194
+rdb_last_save_time:{rdb_last_save_time}
 rdb_last_bgsave_status:ok
-rdb_last_bgsave_time_sec:0
+rdb_last_bgsave_time_sec:{rdb_last_bgsave_time_sec}
 rdb_current_bgsave_time_sec:-1
-rdb_saves:3
-rdb_last_cow_size:765952
+rdb_saves:{rdb_saves}
+rdb_last_cow_size:{rdb_last_cow_size}
 rdb_last_load_keys_expired:0
 rdb_last_load_keys_loaded:0
 aof_enabled:0
@@ -148,8 +148,8 @@ keyspace_misses:0
 pubsub_channels:0
 pubsub_patterns:0
 pubsubshard_channels:0
-latest_fork_usec:509
-total_forks:3
+latest_fork_usec:{latest_fork_usec}
+total_forks:{total_forks}
 migrate_cached_sockets:0
 slave_expires_tracked_keys:0
 active_defrag_hits:0
