@@ -10,9 +10,9 @@ monotonic_clock:POSIX clock_gettime
 multiplexing_api:epoll
 atomicvar_api:c11-builtin
 gcc_version:13.3.0
-process_id:9035
+process_id:{process_id}
 process_supervised:systemd
-run_id:9ff92323fc209c2d3bf85436f0f760057abcef0a
+run_id:{run_id}
 tcp_port:6379
 server_time_usec:{server_time_use}
 uptime_in_seconds:{uptime_in_seconds}
@@ -35,8 +35,8 @@ tracking_clients:0
 clients_in_timeout_table:0
 
 # Memory
-used_memory:1850464
-used_memory_human:1.76M
+used_memory:{used_memory}
+used_memory_human:{used_memory_human}
 used_memory_rss:13672448
 used_memory_rss_human:13.04M
 used_memory_peak:4038272
