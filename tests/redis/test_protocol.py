@@ -52,3 +52,6 @@ class TestRedisConnection:
     def test_receive_data_no_events_after_error(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+OK\n") == [ProtocolErrorOccurred()]
         assert connection.receive_data(b"+OK\r\n") == []
+
+    def test_send_bulk_string(self, connection: RedisConnection) -> None:
+        assert connection.send_bulk_string(b"foo") == b"$3\r\nfoo\r\n"
