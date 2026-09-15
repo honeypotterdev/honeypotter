@@ -26,10 +26,13 @@ class InfoProvider:
         self._start = datetime.now(tz=UTC) - timedelta(days=30)
         self._process_id = random.randint(9_000, 10_000)
         self._run_id = secrets.token_hex(20)
+        self._rss_overhead = random.randint(5 * 1024**2, 10 * 1024**2)
+        self._used_memory_peak = random.randint(60 * 1024**2, 70 * 1024**2)
 
     def generate_info(self) -> str:
         now = self._now()
-        used_memory = self._used_memory()
+        used_memory = self._random_used_memory()
+        used_memory_rss = self._used_memory_rss(used_memory)
 
         return _redis_info.format(
             run_id=self._run_id,
@@ -37,9 +40,15 @@ class InfoProvider:
             server_time_usec=self._server_time_usec(now),
             uptime_in_seconds=self._uptime_in_seconds(now),
             uptime_in_days=self._uptime_in_days(now),
-            connected_clients=self._connected_clients(),
+            lru_clock=self._lru_clock(now),
+            connected_clients=self._random_connected_clients(),
             used_memory=used_memory,
             used_memory_human=bytes_to_human(used_memory),
+            used_memory_rss=used_memory_rss,
+            used_memory_rss_human=bytes_to_human(used_memory_rss),
+            used_memory_peak=self._used_memory_peak,
+            used_memory_peak_human=bytes_to_human(self._used_memory_peak),
+            used_memory_peak_perc=self._used_memory_peak_perc(used_memory),
         )
 
     def _now(self) -> datetime:
@@ -59,20 +68,21 @@ class InfoProvider:
     def _uptime_in_days(self, now: datetime) -> int:
         return int(self._uptime(now).days)
 
-    # TODO: Implement "lru_clock"
+    def _lru_clock(self, now: datetime) -> int:
+        return int(now.timestamp()) & 0xFFFFFF
 
     # Clients
 
-    def _connected_clients(self) -> int:
+    def _random_connected_clients(self) -> int:
         return random.randint(5, 10)
-
-    # TODO: Implement "client_recent_max_input_buffer"
-    # TODO: Implement "client_recent_max_output_buffer"
 
     # Memory
 
-    def _used_memory(self) -> int:
-        low = 1024**2 * 200
-        high = 1024**2 * 250
+    def _random_used_memory(self) -> int:
+        return random.randint(1024**2 * 50, 1024**2 * 55)
 
-        return random.randint(low, high)
+    def _used_memory_rss(self, used_memory: int) -> int:
+        return used_memory + self._rss_overhead
+
+    def _used_memory_peak_perc(self, used_memory: int) -> str:
+        return f"{100 * used_memory / self._used_memory_peak:.2f}%"

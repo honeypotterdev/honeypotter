@@ -19,7 +19,7 @@ uptime_in_seconds:{uptime_in_seconds}
 uptime_in_days:{uptime_in_days}
 hz:10
 configured_hz:10
-lru_clock:10931515
+lru_clock:{lru_clock}
 executable:/usr/bin/redis-server
 config_file:/etc/redis/redis.conf
 io_threads_active:0
@@ -37,11 +37,11 @@ clients_in_timeout_table:0
 # Memory
 used_memory:{used_memory}
 used_memory_human:{used_memory_human}
-used_memory_rss:13672448
-used_memory_rss_human:13.04M
-used_memory_peak:4038272
-used_memory_peak_human:3.85M
-used_memory_peak_perc:45.82%
+used_memory_rss:{used_memory_rss}
+used_memory_rss_human:{used_memory_rss_human}
+used_memory_peak:{used_memory_peak}
+used_memory_peak_human:{used_memory_peak_human}
+used_memory_peak_perc:{used_memory_peak_perc}
 used_memory_overhead:898760
 used_memory_startup:876096
 used_memory_dataset:951704
