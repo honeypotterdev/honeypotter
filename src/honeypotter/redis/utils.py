@@ -39,6 +39,7 @@ class InfoProvider:
         used_memory_dataset = self._used_memory_dataset(used_memory)
         allocator_allocated = self._allocator_allocated(used_memory)
         allocator_active = self._allocator_active(allocator_allocated)
+        allocator_resident = self._allocator_resident(allocator_active)
 
         return _redis_info.format(
             run_id=self._run_id,
@@ -61,9 +62,17 @@ class InfoProvider:
             used_memory_dataset_perc=self._used_memory_dataset_perc(used_memory, used_memory_dataset),
             allocator_allocated=allocator_allocated,
             allocator_active=allocator_active,
-            allocator_resident=self._allocator_resident(allocator_active),
+            allocator_resident=allocator_resident,
             total_system_memory=self._total_system_memory,
             total_system_memory_human=bytes_to_human(self._total_system_memory),
+            allocator_frag_ratio=self._allocator_frag_ratio(allocator_allocated, allocator_active),
+            allocator_frag_bytes=self._allocator_frag_bytes(allocator_allocated, allocator_active),
+            allocator_rss_ratio=self._allocator_rss_ratio(allocator_active, allocator_resident),
+            allocator_rss_bytes=self._allocator_rss_bytes(allocator_active, allocator_resident),
+            rss_overhead_ratio=self._rss_overhead_ratio(allocator_resident, used_memory_rss),
+            rss_overhead_bytes=self._rss_overhead_bytes(allocator_resident, used_memory_rss),
+            mem_fragmentation_ratio=self._mem_fragmentation_ratio(used_memory, used_memory_rss),
+            mem_fragmentation_bytes=self._mem_fragmentation_bytes(used_memory, used_memory_rss),
         )
 
     def _now(self) -> datetime:
@@ -120,3 +129,27 @@ class InfoProvider:
     def _random_total_system_memory(self) -> int:
         reserved_pages = random.randint(64 * 1024**2 // 4096, 128 * 1024**2 // 4096)
         return 2 * 1024**3 - reserved_pages * 4096
+
+    def _allocator_frag_ratio(self, allocator_allocated: int, allocator_active: int) -> str:
+        return f"{allocator_active / allocator_allocated:.2f}"
+
+    def _allocator_frag_bytes(self, allocator_allocated: int, allocator_active: int) -> int:
+        return allocator_active - allocator_allocated
+
+    def _allocator_rss_ratio(self, allocator_active: int, allocator_resident: int) -> str:
+        return f"{allocator_resident / allocator_active:.2f}"
+
+    def _allocator_rss_bytes(self, allocator_active: int, allocator_resident: int) -> int:
+        return allocator_resident - allocator_active
+
+    def _rss_overhead_ratio(self, allocator_resident: int, used_memory_rss: int) -> str:
+        return f"{used_memory_rss / allocator_resident:.2f}"
+
+    def _rss_overhead_bytes(self, allocator_resident: int, used_memory_rss: int) -> int:
+        return used_memory_rss - allocator_resident
+
+    def _mem_fragmentation_ratio(self, used_memory: int, used_memory_rss: int) -> str:
+        return f"{used_memory_rss / used_memory:.2f}"
+
+    def _mem_fragmentation_bytes(self, used_memory: int, used_memory_rss: int) -> int:
+        return used_memory_rss - used_memory
