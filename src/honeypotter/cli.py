@@ -52,7 +52,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
 
     if api_key is not None:
         exporter = TelnetConnectionExporter(api_key=api_key, url=api_url)
-        layer_factories.insert(1, exporter.layer_factory)
+        layer_factories.insert(2, exporter.layer_factory)
 
     _logger.debug("Layers: %s", layer_factories)
 
@@ -87,7 +87,7 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
 
     if api_key is not None:
         exporter = RedisConnectionExporter(api_key=api_key, url=api_url)
-        layer_factories.insert(1, exporter.layer_factory)
+        layer_factories.insert(2, exporter.layer_factory)
 
     _logger.debug("Layers: %s", layer_factories)
 
