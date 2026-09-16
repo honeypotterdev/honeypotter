@@ -8,6 +8,7 @@ from honeypotter.core import Context, Layer
 from honeypotter.decoders import LineDecoder
 from honeypotter.exporters import TelnetConnectionExporter
 from honeypotter.layers import InboundIdleTimeoutLayer, IpRateLimiter, TrafficLoggingLayer
+from honeypotter.redis.exporter import RedisConnectionExporter
 from honeypotter.redis.session import RedisSession
 from honeypotter.shell import ShellSession
 from honeypotter.telnet import TelnetCodec, TelnetSession
@@ -26,13 +27,13 @@ def cli(verbose: int) -> None:
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
 @click.option("-p", "--port", type=int, default=23)
-@click.option("--backend-api-key", type=str, envvar="HONEYPOTTER_API_KEY")
-@click.option("--backend-url", type=str, default="https://api.honeypotter.dev/telnet-connection")
-def telnet(host: str, port: int, backend_api_key: str | None, backend_url: str) -> None:
-    asyncio.run(_run_telnet_server(host=host, port=port, backend_api_key=backend_api_key, backend_url=backend_url))
+@click.option("--api-key", type=str, envvar="HONEYPOTTER_API_KEY")
+@click.option("--api-url", type=str, default="https://api.honeypotter.dev/telnet-connection")
+def telnet(host: str, port: int, api_key: str | None, api_url: str) -> None:
+    asyncio.run(_run_telnet_server(host=host, port=port, api_key=api_key, api_url=api_url))
 
 
-async def _run_telnet_server(*, host: str, port: int, backend_api_key: str | None, backend_url: str) -> None:
+async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_url: str) -> None:
     loop = asyncio.get_running_loop()
 
     _logger.info("Starting server on %s:%s", host, port)
@@ -49,8 +50,8 @@ async def _run_telnet_server(*, host: str, port: int, backend_api_key: str | Non
         ShellSession,
     ]
 
-    if backend_api_key is not None:
-        exporter = TelnetConnectionExporter(api_key=backend_api_key, url=backend_url)
+    if api_key is not None:
+        exporter = TelnetConnectionExporter(api_key=api_key, url=api_url)
         layer_factories.insert(1, exporter.layer_factory)
 
     _logger.debug("Layers: %s", layer_factories)
@@ -64,16 +65,29 @@ async def _run_telnet_server(*, host: str, port: int, backend_api_key: str | Non
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
 @click.option("-p", "--port", type=int, default=6379)
-def redis(host: str, port: int) -> None:
-    asyncio.run(_run_redis_server(host=host, port=port))
+@click.option("--api-key", type=str, envvar="HONEYPOTTER_API_KEY")
+@click.option("--api-url", type=str, default="https://api.honeypotter.dev/redis-connection")
+def redis(host: str, port: int, api_key: str | None, api_url: str) -> None:
+    asyncio.run(_run_redis_server(host=host, port=port, api_key=api_key, api_url=api_url))
 
 
-async def _run_redis_server(*, host: str, port: int) -> None:
+async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_url: str) -> None:
     loop = asyncio.get_running_loop()
 
     _logger.info("Starting server on %s:%s", host, port)
 
-    layer_factories: list[Callable[[Context], Layer]] = [TrafficLoggingLayer, RedisSession]
+    ip_rate_limiter = IpRateLimiter()
+
+    layer_factories: list[Callable[[Context], Layer]] = [
+        ip_rate_limiter.layer_factory,
+        InboundIdleTimeoutLayer,
+        TrafficLoggingLayer,
+        RedisSession,
+    ]
+
+    if api_key is not None:
+        exporter = RedisConnectionExporter(api_key=api_key, url=api_url)
+        layer_factories.insert(1, exporter.layer_factory)
 
     _logger.debug("Layers: %s", layer_factories)
 
