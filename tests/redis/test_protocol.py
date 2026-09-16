@@ -37,14 +37,28 @@ class TestRedisConnection:
     def test_receive_data_array_empty(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"*0\r\n") == [Array(array=[])]
 
-    def test_receive_data_inline_commands(self, connection: RedisConnection) -> None:
+    def test_receive_data_inline_command_without_arguments(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"INFO\r\n") == [Array(array=[BulkString(string=b"INFO")])]
-        assert connection.receive_data(b"GET foo\r\n") == [
-            Array(array=[BulkString(string=b"GET"), BulkString(string=b"foo")])
+
+    def test_receive_data_inline_command_with_arguments(self, connection: RedisConnection) -> None:
+        assert connection.receive_data(b"SET foo bar\r\n") == [
+            Array(
+                array=[
+                    BulkString(string=b"SET"),
+                    BulkString(string=b"foo"),
+                    BulkString(string=b"bar"),
+                ]
+            )
         ]
+
+    def test_receive_data_inline_command_with_quoted_argument(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"GET 'foo bar'\r\n") == [
             Array(array=[BulkString(string=b"GET"), BulkString(string=b"foo bar")])
         ]
+
+    def test_receive_data_inline_command_accepts_lf_and_crlf(self, connection: RedisConnection) -> None:
+        assert connection.receive_data(b"INFO\n") == [Array(array=[BulkString(string=b"INFO")])]
+        assert connection.receive_data(b"INFO\r\n") == [Array(array=[BulkString(string=b"INFO")])]
 
     def test_receive_data_error_after_event(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+OK\r\n+OK\n") == [SimpleString(string=b"OK"), ProtocolErrorOccurred()]

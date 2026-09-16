@@ -19,8 +19,7 @@ class State(Enum):
     WAIT_NULL_BULK_STRING_LF = auto()
     READ_ARRAY_LENGTH = auto()
     WAIT_ARRAY_HEADER_LF = auto()
-    READ_INLINE_COMMANDS = auto()
-    WAIT_INLINE_COMMANDS_LF = auto()
+    READ_INLINE_COMMAND = auto()
     FAILED = auto()
 
 
@@ -80,7 +79,7 @@ class RespParser(StateMachine):
                 condition="is_line_feed",
                 action="reject_unexpected_lf",
             ),
-            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_INLINE_COMMANDS, action="append_byte"),
+            Rule(source=State.WAIT_FOR_TYPE, event="byte", target=State.READ_INLINE_COMMAND, action="append_byte"),
             Rule(
                 source=State.READ_SIMPLE_STRING,
                 event="byte",
@@ -176,20 +175,14 @@ class RespParser(StateMachine):
             ),
             Rule(source=State.WAIT_ARRAY_HEADER_LF, event="byte", target=State.WAIT_FOR_TYPE, condition="is_line_feed"),
             Rule(
-                source=State.READ_INLINE_COMMANDS,
-                event="byte",
-                target=State.WAIT_INLINE_COMMANDS_LF,
-                condition="is_carriage_return",
-            ),
-            Rule(
-                source=State.READ_INLINE_COMMANDS, event="byte", target=State.READ_INLINE_COMMANDS, action="append_byte"
-            ),
-            Rule(
-                source=State.WAIT_INLINE_COMMANDS_LF,
+                source=State.READ_INLINE_COMMAND,
                 event="byte",
                 target=State.WAIT_FOR_TYPE,
                 condition="is_line_feed",
-                action="finish_inline_commands",
+                action="finish_inline_command",
+            ),
+            Rule(
+                source=State.READ_INLINE_COMMAND, event="byte", target=State.READ_INLINE_COMMAND, action="append_byte"
             ),
         ]
 
@@ -269,9 +262,12 @@ class RespParser(StateMachine):
     def reject_unexpected_lf(self, byte: int) -> None:
         raise RespParseError("Unexpected LF", state=self._current_state, byte=byte)
 
-    def finish_inline_commands(self, byte: int) -> RespValue:
+    def finish_inline_command(self, byte: int) -> RespValue:
         commands = bytes(self._buffer)
         self._buffer.clear()
+
+        if commands.endswith(b"\r"):
+            commands = commands[:-1]
 
         strings = [BulkString(string=command.encode()) for command in shlex.split(commands.decode())]
 
