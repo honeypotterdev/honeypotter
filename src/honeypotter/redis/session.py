@@ -39,6 +39,9 @@ class RedisSession(Layer):
 
     def _handle_command(self, command: bytes, args: list[RespValue]) -> None:
         match command.upper(), args:
+            case b"QUIT", *_:
+                self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+                self.ctx.send_outbound(DisconnectRequestEvent())
             case b"PING", []:
                 self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"PONG")))
             case b"INFO", []:

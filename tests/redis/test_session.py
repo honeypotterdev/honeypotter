@@ -1,11 +1,33 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 from honeypotter.core import Context
 from honeypotter.redis.session import RedisSession
-from honeypotter.transport import DataEvent
+from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 
 class TestRedisSession:
+    def test_handle_inbound_quit_without_arguments(self) -> None:
+        context = Mock(spec=Context)
+
+        layer = RedisSession(context)
+        layer.handle_inbound(DataEvent(data=b"*1\r\n$4\r\nQUIT\r\n"))
+
+        assert context.send_outbound.call_args_list == [
+            call(DataEvent(data=b"+OK\r\n")),
+            call(DisconnectRequestEvent()),
+        ]
+
+    def test_handle_inbound_quit_with_arguments(self) -> None:
+        context = Mock(spec=Context)
+
+        layer = RedisSession(context)
+        layer.handle_inbound(DataEvent(data=b"*2\r\n$4\r\nQUIT\r\n$3\r\nfoo\r\n"))
+
+        assert context.send_outbound.call_args_list == [
+            call(DataEvent(data=b"+OK\r\n")),
+            call(DisconnectRequestEvent()),
+        ]
+
     def test_handle_inbound_ping(self) -> None:
         context = Mock(spec=Context)
 
