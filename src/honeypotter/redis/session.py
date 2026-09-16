@@ -38,6 +38,8 @@ class RedisSession(Layer):
                 self.ctx.send_outbound(DisconnectRequestEvent())
 
     def _handle_command(self, command: bytes, args: list[RespValue]) -> None:
+        self._log_command(command, args)
+
         match command.upper(), args:
             case b"QUIT", *_:
                 self.ctx.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
@@ -53,3 +55,13 @@ class RedisSession(Layer):
                 self.ctx.send_outbound(
                     DataEvent(data=self._connection.send_simple_error(b"ERR unknown command '" + command + b"'"))
                 )
+
+    def _log_command(self, command: bytes, args: list[RespValue]) -> None:
+        if not all(isinstance(arg, BulkString) for arg in args):
+            return
+
+        if "redis.commands" not in self.ctx.metadata:
+            self.ctx.metadata["redis.commands"] = []
+
+        full_command = b" ".join([command] + [arg.string for arg in args])
+        self.ctx.metadata["redis.commands"].append(full_command)
