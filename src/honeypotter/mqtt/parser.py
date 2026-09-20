@@ -7,9 +7,9 @@ from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
 
 
 class State(Enum):
-    WAIT_FOR_TYPE = auto()
-    CONNECT_READ_REMAINING_LENGTH = auto()
-    CONNECT_READ_PACKET = auto()
+    READ_TYPE_AND_FLAGS = auto()
+    READ_REMAINING_LENGTH = auto()
+    READ_PACKET = auto()
     FAILED = auto()
 
 
@@ -29,43 +29,46 @@ class MqttParser(StateMachine):
         super().__init__()
 
         self._buffer = bytearray()
+        self._packet_type = 0
+        self._packet_flags = 0
         self._packet_length = 0
 
     def get_initial_state(self) -> Any:
-        return State.WAIT_FOR_TYPE
+        return State.READ_TYPE_AND_FLAGS
 
     def get_rules(self) -> list[Rule]:
         return [
             Rule(
-                source=State.WAIT_FOR_TYPE,
+                source=State.READ_TYPE_AND_FLAGS,
                 event="byte",
-                target=State.CONNECT_READ_REMAINING_LENGTH,
-                condition="is_connect_type",
+                target=State.READ_REMAINING_LENGTH,
+                condition="is_valid_packet_type",
+                action="consume_type_and_flags",
             ),
             Rule(
-                source=State.CONNECT_READ_REMAINING_LENGTH,
+                source=State.READ_REMAINING_LENGTH,
                 event="byte",
-                target=State.CONNECT_READ_REMAINING_LENGTH,
+                target=State.READ_REMAINING_LENGTH,
                 condition="has_more_bytes",
                 action="append_byte",
             ),
             Rule(
-                source=State.CONNECT_READ_REMAINING_LENGTH,
+                source=State.READ_REMAINING_LENGTH,
                 event="byte",
-                target=State.CONNECT_READ_PACKET,
+                target=State.READ_PACKET,
                 action="finish_remaining_length",
             ),
             Rule(
-                source=State.CONNECT_READ_PACKET,
+                source=State.READ_PACKET,
                 event="byte",
-                target=State.CONNECT_READ_PACKET,
+                target=State.READ_PACKET,
                 condition="has_remaining_length",
                 action="append_byte",
             ),
             Rule(
-                source=State.CONNECT_READ_PACKET,
+                source=State.READ_PACKET,
                 event="byte",
-                target=State.WAIT_FOR_TYPE,
+                target=State.READ_TYPE_AND_FLAGS,
                 action="finish_connect_packet",
             ),
         ]
@@ -81,8 +84,13 @@ class MqttParser(StateMachine):
             self._transition_to(State.FAILED)
             raise error from e
 
-    def is_connect_type(self, byte: int) -> bool:
-        return bool(byte & 16)
+    def is_valid_packet_type(self, byte: int) -> bool:
+        # TODO: Majority of packets have reserved bits, so connect with non 0 bits is invalid
+        return 1 >= (byte >> 4) <= 15
+
+    def consume_type_and_flags(self, byte: int) -> None:
+        self._packet_type >>= 4
+        self._packet_flags &= 15
 
     def has_more_bytes(self, byte: int) -> bool:
         return bool(byte & 128)
@@ -105,3 +113,7 @@ class MqttParser(StateMachine):
 
         # TODO: Parse variable header and payload
         return ConnectPacket(client_id="john")
+
+
+def _parse_connect_packet(packet: bytes) -> ConnectPacket:
+    pass
