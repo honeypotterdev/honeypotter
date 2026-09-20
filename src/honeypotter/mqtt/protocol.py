@@ -30,7 +30,7 @@ class MqttConnection:
         clean_session: bool = True,
         keep_alive: int = 60,
         client_id: str,
-    ):
+    ) -> bytes:
         protocol_name_bytes = protocol_name.encode("utf-8")
         protocol_name_length_bytes = len(protocol_name_bytes).to_bytes(length=2)
         protocol_level_bytes = protocol_level.to_bytes()
@@ -59,11 +59,11 @@ class MqttConnection:
 
         return b"\x10" + remaining_length + variable_header + payload
 
-    def receive_data(self, data: bytes) -> list:
+    def receive_data(self, data: bytes) -> list[ConnectionEvent]:
         if self._receive_failed:
             return []
 
-        events: list = []
+        events: list[ConnectionEvent] = []
 
         for byte in data:
             try:

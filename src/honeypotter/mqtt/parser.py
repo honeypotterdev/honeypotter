@@ -111,28 +111,33 @@ class MqttParser(StateMachine):
     def finish_connect_packet(self, byte: int) -> MqttValue:
         self._buffer.append(byte)
 
-        packet = _parse_connect_packet(bytes(self._buffer), flags=self._packet_flags)
+        packet = _parse_connect_packet(self._buffer, flags=self._packet_flags)
         self._buffer.clear()
 
         return packet
 
 
-class _PacketReader:
-    """Read MQTT fields from a complete body using network byte order."""
-
-    def __init__(self, packet: bytes) -> None:
-        self._packet = packet
+class _MqttReader:
+    def __init__(self, packet: bytearray) -> None:
+        self._view = memoryview(packet)
         self._position = 0
+
+    @property
+    def remaining(self) -> int:
+        return len(self._view) - self._position
 
     def read_bytes(self, length: int) -> bytes:
         if length < 0:
             raise ValueError("Read length must not be negative")
+
         end = self._position + length
-        if end > len(self._packet):
+        if end > len(self._view):
             raise ValueError(f"Truncated packet at offset {self._position}: expected {length} bytes")
-        value = self._packet[self._position : end]
+
+        value = self._view[self._position : end]
         self._position = end
-        return value
+
+        return bytes(value)
 
     def read_uint8(self) -> int:
         return self.read_bytes(1)[0]
@@ -147,20 +152,18 @@ class _PacketReader:
     def read_utf8_string(self) -> str:
         """Read a length-prefixed string and validate MQTT UTF-8 requirements."""
         value = self.read_length_prefixed_bytes().decode("utf-8")
+
         if "\x00" in value:
             raise ValueError("MQTT strings must not contain U+0000")
+
         return value
 
-    def require_end(self) -> None:
-        if self._position != len(self._packet):
-            raise ValueError("Unexpected trailing bytes in packet body")
 
-
-def _parse_connect_packet(packet: bytes, *, flags: int = 0) -> ConnectPacket:
+def _parse_connect_packet(packet: bytearray, *, flags: int = 0) -> ConnectPacket:
     if flags != 0:
         raise ValueError("CONNECT fixed-header flags must be zero")
 
-    reader = _PacketReader(packet)
+    reader = _MqttReader(packet)
     protocol_name = reader.read_utf8_string()
     protocol_level = reader.read_uint8()
     if protocol_name != "MQTT" or protocol_level != 4:
@@ -195,7 +198,9 @@ def _parse_connect_packet(packet: bytes, *, flags: int = 0) -> ConnectPacket:
 
     username = reader.read_utf8_string() if username_flag else None
     password = reader.read_length_prefixed_bytes() if password_flag else None
-    reader.require_end()
+
+    if reader.remaining:
+        raise ValueError("Unexpected trailing bytes in CONNECT packet")
 
     return ConnectPacket(
         protocol_name=protocol_name,

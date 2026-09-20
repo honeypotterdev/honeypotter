@@ -16,7 +16,7 @@ def remaining_length_encode(length: int) -> bytes:
     return bytes(encoded_bytes)
 
 
-def remaining_length_decode(length: bytes) -> int:
+def remaining_length_decode(length: bytes | bytearray) -> int:
     if len(length) > 4:
         raise ValueError("Remaining length must be <= 4 bytes")
 
