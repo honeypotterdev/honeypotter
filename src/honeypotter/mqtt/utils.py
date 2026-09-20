@@ -14,3 +14,20 @@ def remaining_length_encode(length: int) -> bytes:
             break
 
     return bytes(encoded_bytes)
+
+
+def remaining_length_decode(length: bytes) -> int:
+    if len(length) > 4:
+        raise ValueError("Remaining length must be <= 4 bytes")
+
+    value = 0
+    multiplier = 1
+
+    for byte in length:
+        value += (byte & 127) * multiplier
+        multiplier *= 128
+
+        if byte & 128 == 0:
+            break
+
+    return value
