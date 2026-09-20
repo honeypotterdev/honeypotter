@@ -111,9 +111,102 @@ class MqttParser(StateMachine):
     def finish_connect_packet(self, byte: int) -> MqttValue:
         self._buffer.append(byte)
 
-        # TODO: Parse variable header and payload
-        return ConnectPacket(client_id="john")
+        packet = _parse_connect_packet(bytes(self._buffer), flags=self._packet_flags)
+        self._buffer.clear()
+
+        return packet
 
 
-def _parse_connect_packet(packet: bytes) -> ConnectPacket:
-    pass
+class _PacketReader:
+    """Read MQTT fields from a complete body using network byte order."""
+
+    def __init__(self, packet: bytes) -> None:
+        self._packet = packet
+        self._position = 0
+
+    def read_bytes(self, length: int) -> bytes:
+        if length < 0:
+            raise ValueError("Read length must not be negative")
+        end = self._position + length
+        if end > len(self._packet):
+            raise ValueError(f"Truncated packet at offset {self._position}: expected {length} bytes")
+        value = self._packet[self._position : end]
+        self._position = end
+        return value
+
+    def read_uint8(self) -> int:
+        return self.read_bytes(1)[0]
+
+    def read_uint16(self) -> int:
+        return int.from_bytes(self.read_bytes(2), "big")
+
+    def read_length_prefixed_bytes(self) -> bytes:
+        """Read bytes prefixed by their unsigned 16-bit big-endian length."""
+        return self.read_bytes(self.read_uint16())
+
+    def read_utf8_string(self) -> str:
+        """Read a length-prefixed string and validate MQTT UTF-8 requirements."""
+        value = self.read_length_prefixed_bytes().decode("utf-8")
+        if "\x00" in value:
+            raise ValueError("MQTT strings must not contain U+0000")
+        return value
+
+    def require_end(self) -> None:
+        if self._position != len(self._packet):
+            raise ValueError("Unexpected trailing bytes in packet body")
+
+
+def _parse_connect_packet(packet: bytes, *, flags: int = 0) -> ConnectPacket:
+    if flags != 0:
+        raise ValueError("CONNECT fixed-header flags must be zero")
+
+    reader = _PacketReader(packet)
+    protocol_name = reader.read_utf8_string()
+    protocol_level = reader.read_uint8()
+    if protocol_name != "MQTT" or protocol_level != 4:
+        raise ValueError("Only MQTT 3.1.1 CONNECT packets are supported")
+
+    connect_flags = reader.read_uint8()
+    if connect_flags & 1:
+        raise ValueError("CONNECT reserved flag must be zero")
+    clean_session = bool(connect_flags & 2)
+    will_flag = bool(connect_flags & 4)
+    will_qos = (connect_flags >> 3) & 3
+    will_retain = bool(connect_flags & 32)
+    password_flag = bool(connect_flags & 64)
+    username_flag = bool(connect_flags & 128)
+    if will_qos == 3 or (not will_flag and (will_qos or will_retain)):
+        raise ValueError("Invalid CONNECT Will flags")
+    if password_flag and not username_flag:
+        raise ValueError("CONNECT password requires a username")
+
+    keep_alive = reader.read_uint16()
+    client_id = reader.read_utf8_string()
+    if not client_id and not clean_session:
+        raise ValueError("An empty client ID requires Clean Session")
+
+    will_topic = None
+    will_payload = None
+    if will_flag:
+        will_topic = reader.read_utf8_string()
+        if not will_topic or "+" in will_topic or "#" in will_topic:
+            raise ValueError("Will topic must be nonempty and must not contain wildcards")
+        will_payload = reader.read_length_prefixed_bytes()
+
+    username = reader.read_utf8_string() if username_flag else None
+    password = reader.read_length_prefixed_bytes() if password_flag else None
+    reader.require_end()
+
+    return ConnectPacket(
+        protocol_name=protocol_name,
+        protocol_level=protocol_level,
+        clean_session=clean_session,
+        keep_alive=keep_alive,
+        client_id=client_id,
+        will_topic=will_topic,
+        will_payload=will_payload,
+        will_qos=will_qos,
+        will_retain=will_retain,
+        username=username,
+        password=password,
+    )
