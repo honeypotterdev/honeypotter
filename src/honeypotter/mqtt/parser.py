@@ -2,7 +2,7 @@ from enum import Enum, auto
 from typing import Any
 
 from honeypotter.mqtt.utils import remaining_length_decode
-from honeypotter.mqtt.values import ConnectPacket, Packet
+from honeypotter.mqtt.values import ConnectPacket, Packet, PublishPacket
 from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
 
 
@@ -69,7 +69,7 @@ class MqttParser(StateMachine):
                 source=State.READ_PACKET,
                 event="byte",
                 target=State.READ_TYPE_AND_FLAGS,
-                action="finish_connect_packet",
+                action="finish_packet",
             ),
         ]
 
@@ -85,12 +85,11 @@ class MqttParser(StateMachine):
             raise error from e
 
     def is_valid_packet_type(self, byte: int) -> bool:
-        # TODO: Majority of packets have reserved bits, so connect with non 0 bits is invalid
-        return 1 >= (byte >> 4) <= 15
+        return 1 <= (byte >> 4) <= 15
 
     def consume_type_and_flags(self, byte: int) -> None:
-        self._packet_type >>= 4
-        self._packet_flags &= 15
+        self._packet_type = byte >> 4
+        self._packet_flags = byte & 15
 
     def has_more_bytes(self, byte: int) -> bool:
         return bool(byte & 128)
@@ -108,11 +107,18 @@ class MqttParser(StateMachine):
 
         return self._packet_length != 0
 
-    def finish_connect_packet(self, byte: int) -> Packet:
+    def finish_packet(self, byte: int) -> Packet:
         self._buffer.append(byte)
-
-        packet = _parse_connect_packet(self._buffer, flags=self._packet_flags)
+        buffer = bytes(self._buffer)
         self._buffer.clear()
+
+        match self._packet_type:
+            case 1:
+                packet = _parse_connect_packet(buffer, flags=self._packet_flags)
+            case 3:
+                packet = _parse_publish_packet(buffer, flags=self._packet_flags)
+            case _:
+                raise MqttParseError(f"Unknown packet type {self._packet_type}", state=self._current_state, byte=byte)
 
         return packet
 
@@ -157,6 +163,9 @@ class _MqttReader:
             raise ValueError("MQTT strings must not contain U+0000")
 
         return value
+
+    def read_remaining_bytes(self) -> bytes:
+        return self.read_bytes(self.remaining)
 
 
 def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> ConnectPacket:
@@ -208,4 +217,24 @@ def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Conne
         will_retain=will_retain,
         username=username,
         password=password,
+    )
+
+
+def _parse_publish_packet(packet: bytes | bytearray, *, flags: int = 0) -> PublishPacket:
+    dup = bool(flags & 8)
+    qos = bool((flags >> 1) & 2)
+    retain = bool(flags & 1)
+
+    reader = _MqttReader(packet)
+    topic_name = reader.read_utf8_string()
+
+    if qos:
+        message_identifier = reader.read_uint16()
+    else:
+        message_identifier = None
+
+    message = reader.read_remaining_bytes()
+
+    return PublishPacket(
+        dup=dup, qos=qos, retain=retain, topic_name=topic_name, message_identifier=message_identifier, message=message
     )
