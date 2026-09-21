@@ -1,8 +1,7 @@
 from dataclasses import dataclass
 
 from honeypotter.mqtt.parser import MqttParseError, MqttParser
-from honeypotter.mqtt.utils import remaining_length_encode
-from honeypotter.mqtt.values import MqttValue
+from honeypotter.mqtt.values import ConnectPacket, MqttValue
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -18,46 +17,34 @@ class MqttConnection:
         self._parser = MqttParser()
         self._receive_failed = False
 
-    def send_connect(
+    def send_connect_packet(
         self,
         *,
         protocol_name: str = "MQTT",
         protocol_level: int = 4,
-        username: str | None = None,
-        password: str | None = None,
-        will_retain: bool = False,
-        will_qos: int = 0,
         clean_session: bool = True,
         keep_alive: int = 60,
         client_id: str,
+        will_topic: str | None = None,
+        will_payload: bytes | None = None,
+        will_qos: int = 0,
+        will_retain: bool = False,
+        username: str | None = None,
+        password: bytes | None = None,
     ) -> bytes:
-        protocol_name_bytes = protocol_name.encode("utf-8")
-        protocol_name_length_bytes = len(protocol_name_bytes).to_bytes(length=2)
-        protocol_level_bytes = protocol_level.to_bytes()
-        connect_flags = 0
-
-        if clean_session:
-            connect_flags |= 2
-
-        connect_flags_bytes = connect_flags.to_bytes()
-        keep_alive_bytes = keep_alive.to_bytes(length=2)
-
-        variable_header = (
-            protocol_name_length_bytes
-            + protocol_name_bytes
-            + protocol_level_bytes
-            + connect_flags_bytes
-            + keep_alive_bytes
-        )
-
-        client_id_bytes = client_id.encode("utf-8")
-        client_id_length_bytes = len(client_id_bytes).to_bytes(length=2)
-
-        payload = client_id_length_bytes + client_id_bytes
-
-        remaining_length = remaining_length_encode(len(variable_header + payload))
-
-        return b"\x10" + remaining_length + variable_header + payload
+        return ConnectPacket(
+            protocol_name=protocol_name,
+            protocol_level=protocol_level,
+            clean_session=clean_session,
+            keep_alive=keep_alive,
+            client_id=client_id,
+            will_topic=will_topic,
+            will_payload=will_payload,
+            will_qos=will_qos,
+            will_retain=will_retain,
+            username=username,
+            password=password,
+        ).to_bytes()
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
         if self._receive_failed:

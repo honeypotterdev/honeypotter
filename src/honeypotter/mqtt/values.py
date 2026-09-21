@@ -32,11 +32,11 @@ class ConnectPacket:
         keep_alive_bytes = self.keep_alive.to_bytes(length=2)
 
         variable_header = (
-                protocol_name_length_bytes
-                + protocol_name_bytes
-                + protocol_level_bytes
-                + connect_flags_bytes
-                + keep_alive_bytes
+            protocol_name_length_bytes
+            + protocol_name_bytes
+            + protocol_level_bytes
+            + connect_flags_bytes
+            + keep_alive_bytes
         )
 
         client_id_bytes = self.client_id.encode("utf-8")

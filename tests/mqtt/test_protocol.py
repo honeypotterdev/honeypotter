@@ -1,17 +1,21 @@
+import pytest
+
 from honeypotter.mqtt.protocol import MqttConnection
 from honeypotter.mqtt.values import ConnectPacket
 
 
 class TestMqttConnection:
-    def test_send_connect(self) -> None:
-        connection = MqttConnection()
+    @pytest.fixture
+    def connection(self) -> MqttConnection:
+        return MqttConnection()
 
+    def test_send_connect_packet(self, connection: MqttConnection) -> None:
         assert (
-            connection.send_connect(client_id="john")
+            connection.send_connect_packet(client_id="john")
             == b"\x10\x10\x00\x04\x4d\x51\x54\x54\x04\x02\x00\x3c\x00\x04\x6a\x6f\x68\x6e"
         )
 
-    def test_receive_data(self) -> None:
-        connection = MqttConnection()
+    def test_receive_data(self, connection: MqttConnection) -> None:
+        packet = ConnectPacket(client_id="john")
 
-        assert connection.receive_data(connection.send_connect(client_id="john")) == [ConnectPacket(client_id="john")]
+        assert connection.receive_data(packet.to_bytes()) == [packet]
