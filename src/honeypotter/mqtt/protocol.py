@@ -49,10 +49,7 @@ class MqttConnection:
     def send_conn_ack_packet(
         self, *, session_present: bool = False, return_code: ConnectReturnCode = ConnectReturnCode.ACCEPTED
     ) -> bytes:
-        return ConnAckPacket(
-            session_present=session_present,
-            return_code=return_code,
-        ).to_bytes()
+        return ConnAckPacket(session_present=session_present, return_code=return_code).to_bytes()
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
         if self._receive_failed:
