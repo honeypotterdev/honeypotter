@@ -10,7 +10,7 @@ class ConnectPacket:
     protocol_level: int = 4
     clean_session: bool = True
     keep_alive: int = 60
-    client_id: str
+    client_id: str | None = None
     will_topic: str | None = None
     will_message: bytes | None = None
     will_qos: int = 0
@@ -46,8 +46,12 @@ class ConnectPacket:
             + keep_alive_bytes
         )
 
-        client_id_bytes = self.client_id.encode("utf-8")
-        client_id_length_bytes = len(client_id_bytes).to_bytes(length=2)
+        if self.client_id is not None:
+            client_id_bytes = self.client_id.encode("utf-8")
+            client_id_length_bytes = len(client_id_bytes).to_bytes(length=2)
+        else:
+            client_id_bytes = b""
+            client_id_length_bytes = (0).to_bytes(length=2)
 
         payload = client_id_length_bytes + client_id_bytes
 

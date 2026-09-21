@@ -24,7 +24,7 @@ class MqttConnection:
         protocol_level: int = 4,
         clean_session: bool = True,
         keep_alive: int = 60,
-        client_id: str,
+        client_id: str | None = None,
         will_topic: str | None = None,
         will_payload: bytes | None = None,
         will_qos: int = 0,
