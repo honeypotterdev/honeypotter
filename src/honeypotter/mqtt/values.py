@@ -127,4 +127,15 @@ class PublishPacket:
         return header_bytes + remaining_length + variable_header + self.message
 
 
-type Packet = ConnectPacket | ConnAckPacket | PublishPacket
+@dataclass(frozen=True, kw_only=True)
+class PubAckPacket:
+    message_identifier: int
+
+    def to_bytes(self) -> bytes:
+        variable_header = self.message_identifier.to_bytes(length=2)
+        remaining_length = remaining_length_encode(len(variable_header))
+
+        return b"\x40" + remaining_length + variable_header
+
+
+type Packet = ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket

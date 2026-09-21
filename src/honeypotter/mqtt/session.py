@@ -3,7 +3,7 @@ from typing import Any
 
 from honeypotter.core import Context, Layer
 from honeypotter.mqtt.protocol import ConnectionEvent, MqttConnection
-from honeypotter.mqtt.values import ConnectPacket
+from honeypotter.mqtt.values import ConnectPacket, PublishPacket
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
@@ -31,5 +31,14 @@ class MqttSession(Layer):
         match event:
             case ConnectPacket():
                 self.ctx.send_outbound(DataEvent(data=self._connection.send_conn_ack_packet()))
+            case (
+                PublishPacket(qos=1, message_identifier=message_identifier)
+                | PublishPacket(qos=2, message_identifier=message_identifier)
+            ):
+                assert message_identifier is not None
+
+                self.ctx.send_outbound(
+                    DataEvent(data=self._connection.send_pub_ack(message_identifier=message_identifier))
+                )
             case _:
                 self.ctx.send_outbound(DisconnectRequestEvent())

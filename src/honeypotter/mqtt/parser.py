@@ -222,7 +222,7 @@ def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Conne
 
 def _parse_publish_packet(packet: bytes | bytearray, *, flags: int = 0) -> PublishPacket:
     dup = bool(flags & 8)
-    qos = bool((flags >> 1) & 2)
+    qos = (flags >> 1) & 3
     retain = bool(flags & 1)
 
     reader = _MqttReader(packet)

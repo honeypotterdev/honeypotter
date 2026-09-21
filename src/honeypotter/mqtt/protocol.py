@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from honeypotter.mqtt.parser import MqttParseError, MqttParser
-from honeypotter.mqtt.values import ConnAckPacket, ConnectPacket, ConnectReturnCode, Packet, PublishPacket
+from honeypotter.mqtt.values import ConnAckPacket, ConnectPacket, ConnectReturnCode, Packet, PubAckPacket, PublishPacket
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,6 +69,9 @@ class MqttConnection:
             message_identifier=message_identifier,
             message=message,
         ).to_bytes()
+
+    def send_pub_ack(self, message_identifier: int) -> bytes:
+        return PubAckPacket(message_identifier=message_identifier).to_bytes()
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
         if self._receive_failed:
