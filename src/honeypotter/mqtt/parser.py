@@ -118,7 +118,7 @@ class MqttParser(StateMachine):
 
 
 class _MqttReader:
-    def __init__(self, packet: bytearray) -> None:
+    def __init__(self, packet: bytes | bytearray) -> None:
         self._view = memoryview(packet)
         self._position = 0
 
@@ -143,7 +143,7 @@ class _MqttReader:
         return self.read_bytes(1)[0]
 
     def read_uint16(self) -> int:
-        return int.from_bytes(self.read_bytes(2), "big")
+        return int.from_bytes(self.read_bytes(2))
 
     def read_length_prefixed_bytes(self) -> bytes:
         """Read bytes prefixed by their unsigned 16-bit big-endian length."""
@@ -159,29 +159,24 @@ class _MqttReader:
         return value
 
 
-def _parse_connect_packet(packet: bytearray, *, flags: int = 0) -> ConnectPacket:
+def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> ConnectPacket:
     if flags != 0:
         raise ValueError("CONNECT fixed-header flags must be zero")
 
     reader = _MqttReader(packet)
     protocol_name = reader.read_utf8_string()
     protocol_level = reader.read_uint8()
-    if protocol_name != "MQTT" or protocol_level != 4:
-        raise ValueError("Only MQTT 3.1.1 CONNECT packets are supported")
-
     connect_flags = reader.read_uint8()
+
     if connect_flags & 1:
         raise ValueError("CONNECT reserved flag must be zero")
+
     clean_session = bool(connect_flags & 2)
     will_flag = bool(connect_flags & 4)
     will_qos = (connect_flags >> 3) & 3
     will_retain = bool(connect_flags & 32)
     password_flag = bool(connect_flags & 64)
     username_flag = bool(connect_flags & 128)
-    if will_qos == 3 or (not will_flag and (will_qos or will_retain)):
-        raise ValueError("Invalid CONNECT Will flags")
-    if password_flag and not username_flag:
-        raise ValueError("CONNECT password requires a username")
 
     keep_alive = reader.read_uint16()
     client_id = reader.read_utf8_string()
@@ -189,12 +184,11 @@ def _parse_connect_packet(packet: bytearray, *, flags: int = 0) -> ConnectPacket
         raise ValueError("An empty client ID requires Clean Session")
 
     will_topic = None
-    will_payload = None
+    will_message = None
+
     if will_flag:
         will_topic = reader.read_utf8_string()
-        if not will_topic or "+" in will_topic or "#" in will_topic:
-            raise ValueError("Will topic must be nonempty and must not contain wildcards")
-        will_payload = reader.read_length_prefixed_bytes()
+        will_message = reader.read_length_prefixed_bytes()
 
     username = reader.read_utf8_string() if username_flag else None
     password = reader.read_length_prefixed_bytes() if password_flag else None
@@ -209,7 +203,7 @@ def _parse_connect_packet(packet: bytearray, *, flags: int = 0) -> ConnectPacket
         keep_alive=keep_alive,
         client_id=client_id,
         will_topic=will_topic,
-        will_payload=will_payload,
+        will_payload=will_message,
         will_qos=will_qos,
         will_retain=will_retain,
         username=username,
