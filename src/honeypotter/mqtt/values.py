@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from enum import IntEnum
 
 from honeypotter.mqtt.utils import remaining_length_encode
 
@@ -64,6 +65,29 @@ class ConnectPacket:
         remaining_length = remaining_length_encode(len(variable_header + payload))
 
         return b"\x10" + remaining_length + variable_header + payload
+
+
+class ConnectReturnCode(IntEnum):
+    ACCEPTED = 0
+    REFUSED_UNACCEPTABLE_PROTOCOL_VERSION = 1
+    REFUSED_IDENTIFIER_REJECTED = 2
+    REFUSED_SERVER_UNAVAILABLE = 3
+    REFUSED_BAD_USER_NAME_OR_PASSWORD = 4
+    REFUSED_NOT_AUTHORIZED = 5
+
+
+@dataclass(frozen=True, kw_only=True)
+class ConnAckPacket:
+    session_present: bool = False
+    return_code: ConnectReturnCode = ConnectReturnCode.ACCEPTED
+
+    def to_bytes(self) -> bytes:
+        ack_flags_bytes = int(self.session_present).to_bytes()
+        return_code_bytes = self.return_code.to_bytes()
+        variable_header = ack_flags_bytes + return_code_bytes
+        remaining_length = remaining_length_encode(len(variable_header))
+
+        return b"\x20" + remaining_length + variable_header
 
 
 type MqttValue = ConnectPacket

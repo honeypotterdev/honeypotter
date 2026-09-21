@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 from honeypotter.mqtt.parser import MqttParseError, MqttParser
-from honeypotter.mqtt.values import ConnectPacket, MqttValue
+from honeypotter.mqtt.values import ConnAckPacket, ConnectPacket, ConnectReturnCode, MqttValue
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,6 +44,14 @@ class MqttConnection:
             will_retain=will_retain,
             username=username,
             password=password,
+        ).to_bytes()
+
+    def send_conn_ack_packet(
+        self, *, session_present: bool = False, return_code: ConnectReturnCode = ConnectReturnCode.ACCEPTED
+    ) -> bytes:
+        return ConnAckPacket(
+            session_present=session_present,
+            return_code=return_code,
         ).to_bytes()
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
