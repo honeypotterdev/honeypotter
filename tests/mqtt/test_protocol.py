@@ -15,6 +15,9 @@ class TestMqttConnection:
     def test_send_conn_ack_packet(self, connection: MqttConnection) -> None:
         assert connection.send_conn_ack_packet() == b"\x20\x02\x00\x00"
 
+    def test_send_publish_packet(self, connection: MqttConnection) -> None:
+        assert connection.send_publish_packet(topic_name="foo") == b"\x30\x05\x00\x03\x66\x6f\x6f"
+
     def test_receive_data(self, connection: MqttConnection) -> None:
         packet = ConnectPacket(client_id="john")
 

@@ -2,7 +2,7 @@ from enum import Enum, auto
 from typing import Any
 
 from honeypotter.mqtt.utils import remaining_length_decode
-from honeypotter.mqtt.values import ConnectPacket, MqttValue
+from honeypotter.mqtt.values import ConnectPacket, Packet
 from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
 
 
@@ -76,7 +76,7 @@ class MqttParser(StateMachine):
     def get_final_state(self) -> Any:
         return State.FAILED
 
-    def feed_byte(self, byte: int) -> MqttValue | None:
+    def feed_byte(self, byte: int) -> Packet | None:
         try:
             return self.send("byte", byte)
         except UnhandledEventError as e:
@@ -108,7 +108,7 @@ class MqttParser(StateMachine):
 
         return self._packet_length != 0
 
-    def finish_connect_packet(self, byte: int) -> MqttValue:
+    def finish_connect_packet(self, byte: int) -> Packet:
         self._buffer.append(byte)
 
         packet = _parse_connect_packet(self._buffer, flags=self._packet_flags)

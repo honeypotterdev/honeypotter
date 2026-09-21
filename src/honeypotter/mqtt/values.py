@@ -94,4 +94,37 @@ class ConnAckPacket:
         return b"\x20" + remaining_length + variable_header
 
 
-type MqttValue = ConnectPacket
+@dataclass(frozen=True, kw_only=True)
+class PublishPacket:
+    dup: bool = False
+    qos: int = 0
+    retain: bool = False
+    topic_name: str
+    message_identifier: int | None = None
+    message: bytes = b""
+
+    def to_bytes(self) -> bytes:
+        header = 48
+
+        if self.dup:
+            header |= 8
+        if self.qos:
+            header |= self.qos << 1
+        if self.retain:
+            header |= 1
+
+        header_bytes = header.to_bytes()
+
+        topic_name_bytes = self.topic_name.encode("utf-8")
+        topic_name_length_bytes = len(topic_name_bytes).to_bytes(length=2)
+        variable_header = topic_name_length_bytes + topic_name_bytes
+
+        if self.message_identifier is not None:
+            variable_header += self.message_identifier.to_bytes(length=2)
+
+        remaining_length = remaining_length_encode(len(variable_header + self.message))
+
+        return header_bytes + remaining_length + variable_header + self.message
+
+
+type Packet = ConnectPacket | ConnAckPacket | PublishPacket
