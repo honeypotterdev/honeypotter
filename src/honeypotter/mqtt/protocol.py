@@ -39,7 +39,7 @@ class MqttConnection:
             keep_alive=keep_alive,
             client_id=client_id,
             will_topic=will_topic,
-            will_payload=will_payload,
+            will_message=will_payload,
             will_qos=will_qos,
             will_retain=will_retain,
             username=username,

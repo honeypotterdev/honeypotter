@@ -11,7 +11,7 @@ class ConnectPacket:
     keep_alive: int = 60
     client_id: str
     will_topic: str | None = None
-    will_payload: bytes | None = None
+    will_message: bytes | None = None
     will_qos: int = 0
     will_retain: bool = False
     username: str | None = None
@@ -25,8 +25,14 @@ class ConnectPacket:
 
         if self.clean_session:
             connect_flags |= 2
-
-        # TODO: Set will flag, Will QoS, Will retain, Password and Username connect flags
+        if self.will_topic is not None:
+            connect_flags |= 4 | (self.will_qos << 3)
+        if self.will_retain:
+            connect_flags |= 32
+        if self.password is not None:
+            connect_flags |= 64
+        if self.username is not None:
+            connect_flags |= 128
 
         connect_flags_bytes = connect_flags.to_bytes()
         keep_alive_bytes = self.keep_alive.to_bytes(length=2)
@@ -44,7 +50,16 @@ class ConnectPacket:
 
         payload = client_id_length_bytes + client_id_bytes
 
-        # TODO: Add will topic, will message, username and password to payload
+        if self.will_topic is not None and self.will_message is not None:
+            will_topic_bytes = self.will_topic.encode("utf-8")
+            payload += len(will_topic_bytes).to_bytes(length=2) + will_topic_bytes
+            payload += len(self.will_message).to_bytes(length=2) + self.will_message
+
+        if self.username is not None:
+            username_bytes = self.username.encode("utf-8")
+            payload += len(username_bytes).to_bytes(length=2) + username_bytes
+        if self.password is not None:
+            payload += len(self.password).to_bytes(length=2) + self.password
 
         remaining_length = remaining_length_encode(len(variable_header + payload))
 
