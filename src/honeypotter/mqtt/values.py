@@ -138,4 +138,32 @@ class PubAckPacket:
         return b"\x40" + remaining_length + variable_header
 
 
+@dataclass(frozen=True, kw_only=True)
+class Subscription:
+    topic_filter: str
+    qos: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class SubscribePacket:
+    message_identifier: int
+    subscriptions: list[Subscription]
+
+    def to_bytes(self) -> bytes:
+        variable_header = self.message_identifier.to_bytes(length=2)
+        payload = b""
+
+        for subscription in self.subscriptions:
+            subscription_topic_bytes = subscription.topic_filter.encode("utf-8")
+            payload += (
+                len(subscription_topic_bytes).to_bytes(length=2)
+                + subscription_topic_bytes
+                + subscription.qos.to_bytes()
+            )
+
+        remaining_length = remaining_length_encode(len(variable_header + payload))
+
+        return b"\x82" + remaining_length + variable_header + payload
+
+
 type Packet = ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket
