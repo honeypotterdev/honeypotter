@@ -2,7 +2,7 @@ from enum import Enum, auto
 from typing import Any
 
 from honeypotter.mqtt.utils import remaining_length_decode
-from honeypotter.mqtt.values import ConnectPacket, Packet, PublishPacket
+from honeypotter.mqtt.values import ConnectPacket, Packet, PublishPacket, SubscribePacket, Subscription
 from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
 
 
@@ -117,6 +117,8 @@ class MqttParser(StateMachine):
                 packet = _parse_connect_packet(buffer, flags=self._packet_flags)
             case 3:
                 packet = _parse_publish_packet(buffer, flags=self._packet_flags)
+            case 8:
+                packet = _parse_subscribe_packet(buffer, flags=self._packet_flags)
             case _:
                 raise MqttParseError(f"Unknown packet type {self._packet_type}", state=self._current_state, byte=byte)
 
@@ -238,3 +240,16 @@ def _parse_publish_packet(packet: bytes | bytearray, *, flags: int = 0) -> Publi
     return PublishPacket(
         dup=dup, qos=qos, retain=retain, topic_name=topic_name, message_identifier=message_identifier, message=message
     )
+
+
+def _parse_subscribe_packet(packet: bytes | bytearray, *, flags: int = 0) -> SubscribePacket:
+    reader = _MqttReader(packet)
+    message_identifier = reader.read_uint16()
+    subscriptions = []
+
+    while reader.remaining:
+        topic_filter = reader.read_utf8_string()
+        qos = reader.read_uint8()
+        subscriptions.append(Subscription(topic_filter=topic_filter, qos=qos))
+
+    return SubscribePacket(message_identifier=message_identifier, subscriptions=subscriptions)

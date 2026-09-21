@@ -166,4 +166,4 @@ class SubscribePacket:
         return b"\x82" + remaining_length + variable_header + payload
 
 
-type Packet = ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket
+type Packet = ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket | SubscribePacket

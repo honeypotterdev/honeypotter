@@ -1,7 +1,7 @@
 import pytest
 
 from honeypotter.mqtt.protocol import MqttConnection
-from honeypotter.mqtt.values import ConnectPacket, PublishPacket, Subscription
+from honeypotter.mqtt.values import ConnectPacket, PublishPacket, SubscribePacket, Subscription
 
 
 class TestMqttConnection:
@@ -36,5 +36,10 @@ class TestMqttConnection:
 
     def test_receive_data_publish_packet(self, connection: MqttConnection) -> None:
         packet = PublishPacket(topic_name="foo")
+
+        assert connection.receive_data(packet.to_bytes()) == [packet]
+
+    def test_receive_data_subscribe_packet(self, connection: MqttConnection) -> None:
+        packet = SubscribePacket(message_identifier=1, subscriptions=[Subscription(topic_filter="foo", qos=0)])
 
         assert connection.receive_data(packet.to_bytes()) == [packet]
