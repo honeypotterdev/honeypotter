@@ -179,4 +179,12 @@ class SubAckPacket:
         return b"\x90" + remaining_length + variable_header + payload
 
 
-type Packet = ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket | SubscribePacket | SubAckPacket
+@dataclass(frozen=True)
+class DisconnectPacket:
+    def to_bytes(self) -> bytes:
+        return b"\xe0\x00"
+
+
+type Packet = (
+    ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket | SubscribePacket | SubAckPacket | DisconnectPacket
+)

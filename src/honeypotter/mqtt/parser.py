@@ -2,7 +2,14 @@ from enum import Enum, auto
 from typing import Any
 
 from honeypotter.mqtt.utils import remaining_length_decode
-from honeypotter.mqtt.values import ConnectPacket, Packet, PublishPacket, SubscribePacket, Subscription
+from honeypotter.mqtt.values import (
+    ConnectPacket,
+    DisconnectPacket,
+    Packet,
+    PublishPacket,
+    SubscribePacket,
+    Subscription,
+)
 from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
 
 
@@ -44,6 +51,13 @@ class MqttParser(StateMachine):
                 target=State.READ_REMAINING_LENGTH,
                 condition="is_valid_packet_type",
                 action="consume_type_and_flags",
+            ),
+            Rule(
+                source=State.READ_REMAINING_LENGTH,
+                event="byte",
+                target=State.READ_TYPE_AND_FLAGS,
+                condition="zero_length",
+                action="finish_packet",
             ),
             Rule(
                 source=State.READ_REMAINING_LENGTH,
@@ -91,6 +105,9 @@ class MqttParser(StateMachine):
         self._packet_type = byte >> 4
         self._packet_flags = byte & 15
 
+    def zero_length(self, byte: int) -> bool:
+        return byte == 0
+
     def has_more_bytes(self, byte: int) -> bool:
         return bool(byte & 128)
 
@@ -119,6 +136,8 @@ class MqttParser(StateMachine):
                 packet = _parse_publish_packet(buffer, flags=self._packet_flags)
             case 8:
                 packet = _parse_subscribe_packet(buffer, flags=self._packet_flags)
+            case 14:
+                packet = _parse_disconnect_packet(buffer, flags=self._packet_flags)
             case _:
                 raise MqttParseError(f"Unknown packet type {self._packet_type}", state=self._current_state, byte=byte)
 
@@ -253,3 +272,16 @@ def _parse_subscribe_packet(packet: bytes | bytearray, *, flags: int = 0) -> Sub
         subscriptions.append(Subscription(topic_filter=topic_filter, qos=qos))
 
     return SubscribePacket(message_identifier=message_identifier, subscriptions=subscriptions)
+
+
+def _parse_disconnect_packet(packet: bytes | bytearray, *, flags: int = 0) -> DisconnectPacket:
+    reader = _MqttReader(packet)
+    remaining = reader.read_remaining_bytes()
+
+    if remaining != b"\x00":
+        raise ValueError("MQTT disconnect packet must not contain \x00")
+
+    if reader.remaining:
+        raise ValueError("Unexpected trailing bytes in DISCONNECT packet")
+
+    return DisconnectPacket()
