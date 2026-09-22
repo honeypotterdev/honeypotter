@@ -8,6 +8,7 @@ from honeypotter.core import Context, Layer
 from honeypotter.decoders import LineDecoder
 from honeypotter.exporters import TelnetConnectionExporter
 from honeypotter.layers import InboundIdleTimeoutLayer, IpRateLimiter, TrafficLoggingLayer
+from honeypotter.mqtt.session import MqttSession
 from honeypotter.redis.exporter import RedisConnectionExporter
 from honeypotter.redis.session import RedisSession
 from honeypotter.shell import ShellSession
@@ -88,6 +89,35 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
     if api_key is not None:
         exporter = RedisConnectionExporter(api_key=api_key, url=api_url)
         layer_factories.insert(2, exporter.layer_factory)
+
+    _logger.debug("Layers: %s", layer_factories)
+
+    server = await loop.create_server(TransportProtocolFactory(layer_factories=layer_factories), host=host, port=port)
+
+    async with server:
+        await server.serve_forever()
+
+
+@cli.command()
+@click.option("-h", "--host", type=str, default="0.0.0.0")
+@click.option("-p", "--port", type=int, default=1883)
+def mqtt(host: str, port: int) -> None:
+    asyncio.run(_run_mqtt_server(host=host, port=port))
+
+
+async def _run_mqtt_server(*, host: str, port: int) -> None:
+    loop = asyncio.get_running_loop()
+
+    _logger.info("Starting server on %s:%s", host, port)
+
+    ip_rate_limiter = IpRateLimiter()
+
+    layer_factories: list[Callable[[Context], Layer]] = [
+        ip_rate_limiter.layer_factory,
+        InboundIdleTimeoutLayer,
+        TrafficLoggingLayer,
+        MqttSession,
+    ]
 
     _logger.debug("Layers: %s", layer_factories)
 
