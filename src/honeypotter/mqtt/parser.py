@@ -129,6 +129,8 @@ class MqttParser(StateMachine):
         buffer = bytes(self._buffer)
         self._buffer.clear()
 
+        packet: Packet
+
         match self._packet_type:
             case 1:
                 packet = _parse_connect_packet(buffer, flags=self._packet_flags)
