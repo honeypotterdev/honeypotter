@@ -8,6 +8,7 @@ from honeypotter.mqtt.values import (
     Packet,
     PubAckPacket,
     PublishPacket,
+    SubAckPacket,
     SubscribePacket,
     Subscription,
 )
@@ -79,11 +80,14 @@ class MqttConnection:
             message=message,
         ).to_bytes()
 
-    def send_pub_ack(self, message_identifier: int) -> bytes:
+    def send_pub_ack_packet(self, message_identifier: int) -> bytes:
         return PubAckPacket(message_identifier=message_identifier).to_bytes()
 
     def send_subscribe_packet(self, *, message_identifier: int, subscriptions: list[Subscription]) -> bytes:
         return SubscribePacket(message_identifier=message_identifier, subscriptions=subscriptions).to_bytes()
+
+    def send_sub_ack_packet(self, message_identifier: int, return_codes: list[int]) -> bytes:
+        return SubAckPacket(message_identifier=message_identifier, return_codes=return_codes).to_bytes()
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
         if self._receive_failed:

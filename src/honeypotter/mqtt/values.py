@@ -166,4 +166,17 @@ class SubscribePacket:
         return b"\x82" + remaining_length + variable_header + payload
 
 
-type Packet = ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket | SubscribePacket
+@dataclass(frozen=True, kw_only=True)
+class SubAckPacket:
+    message_identifier: int
+    return_codes: list[int]
+
+    def to_bytes(self) -> bytes:
+        variable_header = self.message_identifier.to_bytes(length=2)
+        payload = b"".join(code.to_bytes() for code in self.return_codes)
+        remaining_length = remaining_length_encode(len(variable_header + payload))
+
+        return b"\x90" + remaining_length + variable_header + payload
+
+
+type Packet = ConnectPacket | ConnAckPacket | PublishPacket | PubAckPacket | SubscribePacket | SubAckPacket
