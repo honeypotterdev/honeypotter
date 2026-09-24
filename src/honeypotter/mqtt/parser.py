@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from typing import Any
 
-from honeypotter.mqtt.utils import decode_utf8_string, remaining_length_decode
+from honeypotter.mqtt.utils import decode_remaining_length, decode_utf8_string
 from honeypotter.mqtt.values import (
     ConnectPacket,
     DisconnectPacket,
@@ -116,7 +116,7 @@ class MqttParser(StateMachine):
 
     def finish_remaining_length(self, byte: int) -> None:
         self._buffer.append(byte)
-        self._packet_length = remaining_length_decode(self._buffer)
+        self._packet_length = decode_remaining_length(self._buffer)
         self._buffer.clear()
 
     def has_remaining_length(self, byte: int) -> bool:

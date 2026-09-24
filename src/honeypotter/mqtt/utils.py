@@ -1,7 +1,7 @@
 import re
 
 
-def remaining_length_encode(length: int) -> bytes:
+def encode_remaining_length(length: int) -> bytes:
     encoded_bytes = bytearray()
 
     while True:
@@ -19,7 +19,7 @@ def remaining_length_encode(length: int) -> bytes:
     return bytes(encoded_bytes)
 
 
-def remaining_length_decode(length: bytes | bytearray) -> int:
+def decode_remaining_length(length: bytes | bytearray) -> int:
     if len(length) > 4:
         raise ValueError("Remaining length must be <= 4 bytes")
 
