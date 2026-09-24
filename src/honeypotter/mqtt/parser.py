@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from typing import Any
 
-from honeypotter.mqtt.utils import remaining_length_decode
+from honeypotter.mqtt.utils import decode_utf8_string, remaining_length_decode
 from honeypotter.mqtt.values import (
     ConnectPacket,
     DisconnectPacket,
@@ -177,12 +177,10 @@ class _MqttReader:
 
     def read_utf8_string(self) -> str:
         """Read a length-prefixed string and validate MQTT UTF-8 requirements."""
-        value = self.read_length_prefixed_bytes().decode("utf-8")
 
-        if "\x00" in value:
-            raise ValueError("MQTT strings must not contain U+0000")
+        value = self.read_length_prefixed_bytes()
 
-        return value
+        return decode_utf8_string(value)
 
     def read_remaining_bytes(self) -> bytes:
         return self.read_bytes(self.remaining)
@@ -230,7 +228,7 @@ def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Conne
         protocol_level=protocol_level,
         clean_session=clean_session,
         keep_alive=keep_alive,
-        client_id=client_id or None,
+        client_id=client_id,
         will_topic=will_topic,
         will_message=will_message,
         will_qos=will_qos,

@@ -1,5 +1,7 @@
+import pytest
 from freezegun import freeze_time
 
+from honeypotter.mqtt.utils import decode_utf8_string
 from honeypotter.utils import LRUCache, RateLimiter, TokenBucket
 
 
@@ -57,3 +59,27 @@ def test_rate_limiter() -> None:
 
     # Evicted IP acts like a new key with full burst
     assert limiter.is_allowed("1.1.1.1") is True
+
+
+def test_decode_utf8_string_valid_string():
+    assert decode_utf8_string(b"MQTT") == "MQTT"
+
+
+def test_decode_utf8_string_surrogate_pairs():
+    with pytest.raises(ValueError, match="Invalid UTF-8 sequence"):
+        decode_utf8_string(b"test\xed\xa0\x80")
+
+
+def test_decode_utf8_string_null_byte():
+    with pytest.raises(ValueError, match=r"MUST NOT contain U\+0000"):
+        decode_utf8_string(b"admin\x00/secret")
+
+
+def test_decode_utf8_string_control_characters():
+    with pytest.raises(ValueError, match="SHOULD NOT contain control or non-characters"):
+        decode_utf8_string(b"test\x01string")
+
+
+def test_decode_utf8_string_non_characters():
+    with pytest.raises(ValueError, match="SHOULD NOT contain control or non-characters"):
+        decode_utf8_string(b"test\xef\xbf\xbestring")
