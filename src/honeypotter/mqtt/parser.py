@@ -10,7 +10,7 @@ from honeypotter.mqtt.values import (
     SubscribePacket,
     Subscription,
 )
-from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
+from honeypotter.statemachine import MachineTerminatedError, Rule, StateMachine, UnhandledEventError
 
 
 class State(Enum):
@@ -25,7 +25,7 @@ class ControlPacketType(Enum):
 
 
 class MqttParseError(Exception):
-    def __init__(self, message: str, *, state: State, byte: int) -> None:
+    def __init__(self, message: str, *, state: State | None = None, byte: int | None = None) -> None:
         super().__init__(message)
         self.state = state
         self.byte = byte
@@ -93,7 +93,7 @@ class MqttParser(StateMachine):
     def feed_byte(self, byte: int) -> Packet | None:
         try:
             return self.send("byte", byte)
-        except UnhandledEventError as e:
+        except (UnhandledEventError, MachineTerminatedError) as e:
             error = MqttParseError("Unhandled event occurred", state=self._current_state, byte=byte)
             self._transition_to(State.FAILED)
             raise error from e
@@ -156,12 +156,9 @@ class _MqttReader:
         return len(self._view) - self._position
 
     def read_bytes(self, length: int) -> bytes:
-        if length < 0:
-            raise ValueError("Read length must not be negative")
-
         end = self._position + length
         if end > len(self._view):
-            raise ValueError(f"Truncated packet at offset {self._position}: expected {length} bytes")
+            raise MqttParseError(f"Truncated packet at offset {self._position}: expected {length} bytes")
 
         value = self._view[self._position : end]
         self._position = end
@@ -233,7 +230,7 @@ def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Conne
         protocol_level=protocol_level,
         clean_session=clean_session,
         keep_alive=keep_alive,
-        client_id=client_id,
+        client_id=client_id or None,
         will_topic=will_topic,
         will_message=will_message,
         will_qos=will_qos,
