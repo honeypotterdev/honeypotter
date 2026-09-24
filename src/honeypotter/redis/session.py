@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from honeypotter.core import Context, Layer
+from honeypotter.core import Context, Handler, HandlerContext, Layer
 from honeypotter.redis.protocol import ConnectionEvent, RedisConnection
 from honeypotter.redis.utils import InfoProvider
 from honeypotter.redis.values import Array, BulkString, RespValue
@@ -11,7 +11,8 @@ _logger = logging.getLogger(__name__)
 _info_provider = InfoProvider()
 
 
-class RedisSession(Layer):
+# TODO: Delete
+class RedisSessionLayer(Layer):
     def __init__(self, context: Context) -> None:
         super().__init__(context)
         self._connection = RedisConnection()
@@ -65,3 +66,60 @@ class RedisSession(Layer):
 
         full_command = b" ".join([command] + [arg.string for arg in args])
         self.ctx.metadata["redis.commands"].append(full_command)
+
+
+class RedisSessionHandler(Handler):
+    def __init__(self) -> None:
+        super().__init__()
+
+        self._connection = RedisConnection()
+
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
+        if isinstance(event, DataEvent):
+            events = self._connection.receive_data(event.data)
+
+            _logger.debug(f"Received events: {events!r}")
+
+            for connection_event in events:
+                self._handle_event(context, connection_event)
+
+            return
+
+        super().handle_inbound(context, event)
+
+    def _handle_event(self, context: HandlerContext, event: ConnectionEvent) -> None:
+        match event:
+            case Array(array=[BulkString(string=command), *args]):
+                self._handle_command(context, command, args)
+            case _:
+                context.send_outbound(DataEvent(data=self._connection.send_simple_error(b"ERR unknown error")))
+                context.send_outbound(DisconnectRequestEvent())
+
+    def _handle_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
+        self._log_command(context, command, args)
+
+        match command.upper(), args:
+            case b"QUIT", *_:
+                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+                context.send_outbound(DisconnectRequestEvent())
+            case b"PING", []:
+                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"PONG")))
+            case b"INFO", []:
+                info = _info_provider.generate_info().encode("utf-8")
+                context.send_outbound(DataEvent(data=self._connection.send_bulk_string(info)))
+            case b"SET", [BulkString(string=_), BulkString(string=_)]:
+                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+            case _:
+                context.send_outbound(
+                    DataEvent(data=self._connection.send_simple_error(b"ERR unknown command '" + command + b"'"))
+                )
+
+    def _log_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
+        if not all(isinstance(arg, BulkString) for arg in args):
+            return
+
+        if "redis.commands" not in context.pipeline.metadata:
+            context.pipeline.metadata["redis.commands"] = []
+
+        full_command = b" ".join([command] + [arg.string for arg in args])
+        context.pipeline.metadata["redis.commands"].append(full_command)
