@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from honeypotter.core import Channel, Context, Layer
+from honeypotter.core import Handler, Pipeline
 
 _logger = logging.getLogger(__name__)
 
@@ -29,9 +29,10 @@ class DisconnectRequestEvent:
     pass
 
 
-class TransportProtocolAdapterLayer(Layer):
-    def __init__(self, context: Context, transport: asyncio.Transport) -> None:
-        super().__init__(context)
+class TransportPipeline(Pipeline):
+    def __init__(self, transport: asyncio.Transport) -> None:
+        super().__init__()
+
         self._transport = transport
 
     def handle_outbound(self, event: Any) -> None:
@@ -43,50 +44,35 @@ class TransportProtocolAdapterLayer(Layer):
             self._transport.close()
             return
 
-    def connection_made(self) -> None:
-        self.ctx.send_inbound(ConnectionMadeEvent())
-
-    def data_received(self, data: bytes) -> None:
-        self.ctx.send_inbound(DataEvent(data=data))
-
-    def connection_lost(self, exc: Exception | None) -> None:
-        self.ctx.send_inbound(ConnectionLostEvent(reason=exc))
-
 
 class TransportProtocol(asyncio.Protocol):
-    _adapter_layer: TransportProtocolAdapterLayer
+    pipeline: TransportPipeline
 
-    def __init__(self, layer_factories: list[Callable[[Context], Layer]]) -> None:
-        self._factories = layer_factories
+    def __init__(self, handler_factories: list[Callable[..., Handler]]) -> None:
+        self._handler_factories = handler_factories
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         assert isinstance(transport, asyncio.Transport)
 
-        channel = Channel()
-        channel.metadata["sockname"] = transport.get_extra_info("sockname")
-        channel.metadata["peername"] = transport.get_extra_info("peername")
+        self.pipeline = TransportPipeline(transport)
+        self.pipeline.metadata["sockname"] = transport.get_extra_info("sockname")
+        self.pipeline.metadata["peername"] = transport.get_extra_info("peername")
 
-        self._adapter_layer = channel.add(lambda ctx: TransportProtocolAdapterLayer(ctx, transport))
+        for handler_factory in self._handler_factories:
+            self.pipeline.add_handler(handler_factory())
 
-        for factory in self._factories:
-            channel.add(factory)
-
-        self._adapter_layer.connection_made()
+        self.pipeline.send_inbound(ConnectionMadeEvent())
 
     def data_received(self, data: bytes) -> None:
-        assert self._adapter_layer is not None
-
-        self._adapter_layer.data_received(data)
+        self.pipeline.send_inbound(DataEvent(data=data))
 
     def connection_lost(self, exc: Exception | None) -> None:
-        assert self._adapter_layer is not None
-
-        self._adapter_layer.connection_lost(exc)
+        self.pipeline.send_inbound(ConnectionLostEvent(reason=exc))
 
 
 class TransportProtocolFactory:
-    def __init__(self, layer_factories: list[Callable[[Context], Layer]]) -> None:
-        self._factories = layer_factories
+    def __init__(self, handler_factories: list[Callable[..., Handler]]) -> None:
+        self._handler_factories = handler_factories
 
     def __call__(self) -> TransportProtocol:
-        return TransportProtocol(layer_factories=self._factories)
+        return TransportProtocol(handler_factories=self._handler_factories)

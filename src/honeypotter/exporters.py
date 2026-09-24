@@ -8,7 +8,7 @@ from typing import Any, Literal
 
 from httpx import AsyncClient
 
-from honeypotter.core import Context, Layer
+from honeypotter.core import Handler, HandlerContext
 from honeypotter.transport import ConnectionLostEvent, DataEvent
 
 _logger = logging.getLogger(__name__)
@@ -41,8 +41,8 @@ class TelnetConnectionExporter:
         self._queue = asyncio.Queue[TelnetConnectionDetails]()
         self._worker_task = asyncio.create_task(self._worker())
 
-    def layer_factory(self, context: Context) -> Layer:
-        return TelnetConnectionExporterLayer(context, queue=self._queue)
+    def handler_factory(self) -> Handler:
+        return TelnetConnectionExporterHandler(queue=self._queue)
 
     async def _worker(self) -> None:
         while True:
@@ -88,47 +88,48 @@ class TelnetConnectionExporter:
         r.raise_for_status()
 
 
-class TelnetConnectionExporterLayer(Layer):
-    def __init__(self, context: Context, queue: asyncio.Queue[TelnetConnectionDetails]) -> None:
-        super().__init__(context)
+class TelnetConnectionExporterHandler(Handler):
+    def __init__(self, queue: asyncio.Queue[TelnetConnectionDetails]) -> None:
+        super().__init__()
+
         self._conversation: list[TelnetMessage] = []
         self._initial_time = time.monotonic()
         self._created_at = datetime.now(tz=UTC)
         self._last_direction: Literal["inbound", "outbound"] | None = None
         self._queue = queue
 
-    def handle_inbound(self, event: Any) -> None:
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, ConnectionLostEvent):
             has_inbound_messages = any(message.direction == "inbound" for message in self._conversation)
 
             if has_inbound_messages:
                 self._queue.put_nowait(
                     TelnetConnectionDetails(
-                        honeypot_ip=self.ctx.metadata["sockname"][0],
-                        honeypot_port=self.ctx.metadata["sockname"][1],
-                        client_ip=self.ctx.metadata["peername"][0],
-                        client_port=self.ctx.metadata["peername"][1],
-                        username=self.ctx.metadata.get("shell.username"),
-                        password=self.ctx.metadata.get("shell.password"),
-                        shell_inputs=self.ctx.metadata.get("shell.inputs"),
+                        honeypot_ip=context.pipeline.metadata["sockname"][0],
+                        honeypot_port=context.pipeline.metadata["sockname"][1],
+                        client_ip=context.pipeline.metadata["peername"][0],
+                        client_port=context.pipeline.metadata["peername"][1],
+                        username=context.pipeline.metadata.get("shell.username"),
+                        password=context.pipeline.metadata.get("shell.password"),
+                        shell_inputs=context.pipeline.metadata.get("shell.inputs"),
                         conversation=self._conversation,
                         created_at=self._created_at,
                     )
                 )
 
-            super().handle_inbound(event)
+            super().handle_inbound(context, event)
             return
 
         if isinstance(event, DataEvent):
             self._record_data(direction="inbound", data=event.data)
 
-        super().handle_inbound(event)
+        super().handle_inbound(context, event)
 
-    def handle_outbound(self, event: Any) -> None:
+    def handle_outbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
             self._record_data(direction="outbound", data=event.data)
 
-        super().handle_outbound(event)
+        super().handle_outbound(context, event)
 
     def _record_data(self, direction: Literal["inbound", "outbound"], data: bytes) -> None:
         if self._last_direction is None or direction != self._last_direction:

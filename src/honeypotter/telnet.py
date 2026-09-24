@@ -5,7 +5,7 @@ from enum import Enum, IntEnum, auto
 from typing import Any
 
 from honeypotter.constants import CR, LF, NUL
-from honeypotter.core import Context, Layer
+from honeypotter.core import Handler, HandlerContext
 from honeypotter.statemachine import Rule, StateMachine
 from honeypotter.transport import ConnectionMadeEvent, DataEvent
 
@@ -194,9 +194,9 @@ class TelnetCodecState(Enum):
     SUBNEGOTIATION_IAC = auto()
 
 
-class TelnetCodec(Layer):
-    def __init__(self, context: Context) -> None:
-        super().__init__(context)
+class TelnetCodecHandler(Handler):
+    def __init__(self) -> None:
+        super().__init__()
 
         self._local_options = OptionNegotiator()
         self._peer_options = OptionNegotiator()
@@ -208,54 +208,54 @@ class TelnetCodec(Layer):
         self._negotiation_verb = 0
         self._pending_cr = False
 
-    def handle_inbound(self, event: Any) -> None:
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
             for byte in event.data:
-                self._handle_state(byte)
+                self._handle_state(context, byte)
 
-            self._flush_app_data()
+            self._flush_app_data(context)
             return
 
-        super().handle_inbound(event)
+        super().handle_inbound(context, event)
 
-    def handle_outbound(self, event: Any) -> None:
+    def handle_outbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
-            self.ctx.send_outbound(DataEvent(data=self._encode_application_data(event.data)))
+            context.send_outbound(DataEvent(data=self._encode_application_data(event.data)))
             return
 
         if isinstance(event, CommandEvent):
-            self.ctx.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, event.command])))
+            context.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, event.command])))
             return
 
         if isinstance(event, NegotiationEvent):
-            self._request_negotiation(event.verb, event.option)
+            self._request_negotiation(context, event.verb, event.option)
             return
 
         if isinstance(event, SubnegotiationEvent):
-            self.ctx.send_outbound(
+            context.send_outbound(
                 DataEvent(
                     data=bytes([TelnetCode.IAC, TelnetCode.SB]) + event.data + bytes([TelnetCode.IAC, TelnetCode.SE])
                 )
             )
             return
 
-        super().handle_outbound(event)
+        super().handle_outbound(context, event)
 
     def _set_state(self, state: TelnetCodecState) -> None:
         self._state = state
 
-    def _flush_app_data(self) -> None:
+    def _flush_app_data(self, context: HandlerContext) -> None:
         if self._app_data_buffer:
-            self._application_data_received(bytes(self._app_data_buffer))
+            self._application_data_received(context, bytes(self._app_data_buffer))
             self._app_data_buffer.clear()
 
-    def _handle_state(self, byte: int) -> None:
+    def _handle_state(self, context: HandlerContext, byte: int) -> None:
         if self._state == TelnetCodecState.APPLICATION_DATA:
-            self._handle_data_state(byte)
+            self._handle_data_state(context, byte)
             return
 
         if self._state == TelnetCodecState.IAC:
-            self._handle_iac_state(byte)
+            self._handle_iac_state(context, byte)
             return
 
         if self._state == TelnetCodecState.NEGOTIATION:
@@ -267,14 +267,14 @@ class TelnetCodec(Layer):
             return
 
         if self._state == TelnetCodecState.SUBNEGOTIATION_IAC:
-            self._handle_subnegotiation_iac_state(byte)
+            self._handle_subnegotiation_iac_state(context, byte)
             return
 
         raise RuntimeError(f"Unknown state: {self._state!r}")
 
-    def _handle_data_state(self, byte: int) -> None:
+    def _handle_data_state(self, context: HandlerContext, byte: int) -> None:
         if byte == TelnetCode.IAC:
-            self._flush_app_data()
+            self._flush_app_data(context)
             self._set_state(TelnetCodecState.IAC)
             return
 
@@ -297,7 +297,7 @@ class TelnetCodec(Layer):
 
         self._app_data_buffer.append(byte)
 
-    def _handle_iac_state(self, byte: int) -> None:
+    def _handle_iac_state(self, context: HandlerContext, byte: int) -> None:
         if byte == TelnetCode.IAC:
             self._app_data_buffer.append(255)
             self._set_state(TelnetCodecState.APPLICATION_DATA)
@@ -312,7 +312,7 @@ class TelnetCodec(Layer):
             self._set_state(TelnetCodecState.NEGOTIATION)
             return
 
-        self._command_received(byte)
+        self._command_received(context, byte)
         self._set_state(TelnetCodecState.APPLICATION_DATA)
 
     def _handle_negotiation_state(self, byte: int) -> None:
@@ -326,14 +326,14 @@ class TelnetCodec(Layer):
 
         self._subnegotiation_buffer.append(byte)
 
-    def _handle_subnegotiation_iac_state(self, byte: int) -> None:
+    def _handle_subnegotiation_iac_state(self, context: HandlerContext, byte: int) -> None:
         if byte == TelnetCode.IAC:
             self._subnegotiation_buffer.append(255)
             self._set_state(TelnetCodecState.SUBNEGOTIATION)
             return
 
         if byte == TelnetCode.SE:
-            self._subnegotiation_received(bytes(self._subnegotiation_buffer))
+            self._subnegotiation_received(context, bytes(self._subnegotiation_buffer))
             self._subnegotiation_buffer.clear()
             self._set_state(TelnetCodecState.APPLICATION_DATA)
             return
@@ -342,11 +342,11 @@ class TelnetCodec(Layer):
         self._subnegotiation_buffer.clear()
         self._set_state(TelnetCodecState.APPLICATION_DATA)
 
-    def _application_data_received(self, data: bytes) -> None:
-        self.ctx.send_inbound(DataEvent(data=data))
+    def _application_data_received(self, context: HandlerContext, data: bytes) -> None:
+        context.send_inbound(DataEvent(data=data))
 
-    def _command_received(self, command: int) -> None:
-        self.ctx.send_inbound(CommandEvent(command=TelnetCode(command)))
+    def _command_received(self, context: HandlerContext, command: int) -> None:
+        context.send_inbound(CommandEvent(command=TelnetCode(command)))
 
     def _negotiation_received(self, verb: int, option: int) -> None:
         if verb == TelnetCode.WILL:
@@ -371,46 +371,47 @@ class TelnetCodec(Layer):
 
         raise RuntimeError(f"Unknown negotiation verb: {verb!r}")
 
-    def _request_negotiation(self, verb: TelnetCode, option: TelnetCode) -> None:
+    def _request_negotiation(self, context: HandlerContext, verb: TelnetCode, option: TelnetCode) -> None:
         if verb == TelnetCode.WILL:
             action = self._local_options.request_enable(option)
-            self._send_negotiation_action(action, option, TelnetCode.WILL, TelnetCode.WONT)
+            self._send_negotiation_action(context, action, option, TelnetCode.WILL, TelnetCode.WONT)
             return
 
         if verb == TelnetCode.WONT:
             action = self._local_options.request_disable(option)
-            self._send_negotiation_action(action, option, TelnetCode.WILL, TelnetCode.WONT)
+            self._send_negotiation_action(context, action, option, TelnetCode.WILL, TelnetCode.WONT)
             return
 
         if verb == TelnetCode.DO:
             action = self._peer_options.request_enable(option)
-            self._send_negotiation_action(action, option, TelnetCode.DO, TelnetCode.DONT)
+            self._send_negotiation_action(context, action, option, TelnetCode.DO, TelnetCode.DONT)
             return
 
         if verb == TelnetCode.DONT:
             action = self._peer_options.request_disable(option)
-            self._send_negotiation_action(action, option, TelnetCode.DO, TelnetCode.DONT)
+            self._send_negotiation_action(context, action, option, TelnetCode.DO, TelnetCode.DONT)
             return
 
         raise ValueError(f"Unknown negotiation verb: {verb!r}")
 
     def _send_negotiation_action(
         self,
+        context: HandlerContext,
         action: OptionAction | None,
         option: int,
         enable_verb: TelnetCode,
         disable_verb: TelnetCode,
     ) -> None:
         if action is OptionAction.SEND_ENABLE:
-            self._send_negotiation(enable_verb, option)
+            self._send_negotiation(context, enable_verb, option)
         elif action is OptionAction.SEND_DISABLE:
-            self._send_negotiation(disable_verb, option)
+            self._send_negotiation(context, disable_verb, option)
 
-    def _send_negotiation(self, verb: TelnetCode, option: int) -> None:
-        self.ctx.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, verb, option])))
+    def _send_negotiation(self, context: HandlerContext, verb: TelnetCode, option: int) -> None:
+        context.send_outbound(DataEvent(data=bytes([TelnetCode.IAC, verb, option])))
 
-    def _subnegotiation_received(self, data: bytes) -> None:
-        self.ctx.send_inbound(SubnegotiationEvent(data=data))
+    def _subnegotiation_received(self, context: HandlerContext, data: bytes) -> None:
+        context.send_inbound(SubnegotiationEvent(data=data))
 
     def _encode_application_data(self, data: bytes) -> bytes:
         encoded = bytearray()
@@ -428,13 +429,13 @@ class TelnetCodec(Layer):
         return bytes(encoded)
 
 
-class TelnetSession(Layer):
-    def handle_inbound(self, event: Any) -> None:
+class TelnetSessionHandler(Handler):
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, ConnectionMadeEvent):
-            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.WILL, option=TelnetCode.ECHO))
-            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.WILL, option=TelnetCode.SGA))
-            self.ctx.send_outbound(NegotiationEvent(verb=TelnetCode.DO, option=TelnetCode.SGA))
-            super().handle_inbound(event)
+            context.send_outbound(NegotiationEvent(verb=TelnetCode.WILL, option=TelnetCode.ECHO))
+            context.send_outbound(NegotiationEvent(verb=TelnetCode.WILL, option=TelnetCode.SGA))
+            context.send_outbound(NegotiationEvent(verb=TelnetCode.DO, option=TelnetCode.SGA))
+            super().handle_inbound(context, event)
             return
 
-        super().handle_inbound(event)
+        super().handle_inbound(context, event)

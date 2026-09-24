@@ -4,15 +4,15 @@ from collections.abc import Callable
 
 import click
 
-from honeypotter.core import Context, Layer
-from honeypotter.decoders import LineDecoder
+from honeypotter.core import Handler
+from honeypotter.decoders import LineDecoderHandler
 from honeypotter.exporters import TelnetConnectionExporter
-from honeypotter.layers import InboundIdleTimeoutLayer, IpRateLimiter, TrafficLoggingLayer
-from honeypotter.mqtt.session import MqttSession
+from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, TrafficLoggingHandler
+from honeypotter.mqtt.session import MqttSessionHandler
 from honeypotter.redis.exporter import RedisConnectionExporter
-from honeypotter.redis.session import RedisSession
-from honeypotter.shell import ShellSession
-from honeypotter.telnet import TelnetCodec, TelnetSession
+from honeypotter.redis.session import RedisSessionHandler
+from honeypotter.shell import ShellSessionHandler
+from honeypotter.telnet import TelnetCodecHandler, TelnetSessionHandler
 from honeypotter.transport import TransportProtocolFactory
 
 _logger = logging.getLogger(__name__)
@@ -41,23 +41,25 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
 
     ip_rate_limiter = IpRateLimiter()
 
-    layer_factories: list[Callable[[Context], Layer]] = [
-        ip_rate_limiter.layer_factory,
-        InboundIdleTimeoutLayer,
-        TrafficLoggingLayer,
-        TelnetCodec,
-        TelnetSession,
-        LineDecoder,
-        ShellSession,
+    handler_factories: list[Callable[..., Handler]] = [
+        ip_rate_limiter.handler_factory,
+        InboundIdleTimeoutHandler,
+        TrafficLoggingHandler,
+        TelnetCodecHandler,
+        TelnetSessionHandler,
+        LineDecoderHandler,
+        ShellSessionHandler,
     ]
 
     if api_key is not None:
         exporter = TelnetConnectionExporter(api_key=api_key, url=api_url)
-        layer_factories.insert(2, exporter.layer_factory)
+        handler_factories.insert(2, exporter.handler_factory)
 
-    _logger.debug("Layers: %s", layer_factories)
+    _logger.debug("Handlers: %s", handler_factories)
 
-    server = await loop.create_server(TransportProtocolFactory(layer_factories=layer_factories), host=host, port=port)
+    server = await loop.create_server(
+        TransportProtocolFactory(handler_factories=handler_factories), host=host, port=port
+    )
 
     async with server:
         await server.serve_forever()
@@ -79,20 +81,22 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
 
     ip_rate_limiter = IpRateLimiter()
 
-    layer_factories: list[Callable[[Context], Layer]] = [
-        ip_rate_limiter.layer_factory,
-        InboundIdleTimeoutLayer,
-        TrafficLoggingLayer,
-        RedisSession,
+    handler_factories: list[Callable[..., Handler]] = [
+        ip_rate_limiter.handler_factory,
+        InboundIdleTimeoutHandler,
+        TrafficLoggingHandler,
+        RedisSessionHandler,
     ]
 
     if api_key is not None:
         exporter = RedisConnectionExporter(api_key=api_key, url=api_url)
-        layer_factories.insert(2, exporter.layer_factory)
+        handler_factories.insert(2, exporter.handler_factory)
 
-    _logger.debug("Layers: %s", layer_factories)
+    _logger.debug("Handlers: %s", handler_factories)
 
-    server = await loop.create_server(TransportProtocolFactory(layer_factories=layer_factories), host=host, port=port)
+    server = await loop.create_server(
+        TransportProtocolFactory(handler_factories=handler_factories), host=host, port=port
+    )
 
     async with server:
         await server.serve_forever()
@@ -112,16 +116,18 @@ async def _run_mqtt_server(*, host: str, port: int) -> None:
 
     ip_rate_limiter = IpRateLimiter()
 
-    layer_factories: list[Callable[[Context], Layer]] = [
-        ip_rate_limiter.layer_factory,
-        InboundIdleTimeoutLayer,
-        TrafficLoggingLayer,
-        MqttSession,
+    handler_factories: list[Callable[..., Handler]] = [
+        ip_rate_limiter.handler_factory,
+        InboundIdleTimeoutHandler,
+        TrafficLoggingHandler,
+        MqttSessionHandler,
     ]
 
-    _logger.debug("Layers: %s", layer_factories)
+    _logger.debug("Handlers: %s", handler_factories)
 
-    server = await loop.create_server(TransportProtocolFactory(layer_factories=layer_factories), host=host, port=port)
+    server = await loop.create_server(
+        TransportProtocolFactory(handler_factories=handler_factories), host=host, port=port
+    )
 
     async with server:
         await server.serve_forever()

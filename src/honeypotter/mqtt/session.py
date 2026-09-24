@@ -1,7 +1,7 @@
 import logging
 from typing import Any
 
-from honeypotter.core import Context, Layer
+from honeypotter.core import Handler, HandlerContext
 from honeypotter.mqtt.protocol import ConnectionEvent, MqttConnection
 from honeypotter.mqtt.values import ConnectPacket, DisconnectPacket, PublishPacket, SubscribePacket
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
@@ -9,46 +9,47 @@ from honeypotter.transport import DataEvent, DisconnectRequestEvent
 _logger = logging.getLogger(__name__)
 
 
-class MqttSession(Layer):
-    def __init__(self, context: Context) -> None:
-        super().__init__(context)
+class MqttSessionHandler(Handler):
+    def __init__(self) -> None:
+        super().__init__()
+
         self._connection = MqttConnection()
 
-    def handle_inbound(self, event: Any) -> None:
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
             events = self._connection.receive_data(event.data)
 
             _logger.debug(f"Received events: {events!r}")
 
             for connection_event in events:
-                self._handle_event(connection_event)
+                self._handle_event(context, connection_event)
 
             return
 
-        super().handle_inbound(event)
+        super().handle_inbound(context, event)
 
-    def _handle_event(self, event: ConnectionEvent) -> None:
+    def _handle_event(self, context: HandlerContext, event: ConnectionEvent) -> None:
         match event:
             case ConnectPacket():
-                self.ctx.send_outbound(DataEvent(data=self._connection.send_conn_ack_packet()))
+                context.send_outbound(DataEvent(data=self._connection.send_conn_ack_packet()))
             case DisconnectPacket():
-                self.ctx.send_outbound(DisconnectRequestEvent())
+                context.send_outbound(DisconnectRequestEvent())
             case (
                 PublishPacket(qos=1, message_identifier=message_identifier)
                 | PublishPacket(qos=2, message_identifier=message_identifier)
             ):
                 assert message_identifier is not None
 
-                self.ctx.send_outbound(
+                context.send_outbound(
                     DataEvent(data=self._connection.send_pub_ack_packet(message_identifier=message_identifier))
                 )
             case SubscribePacket() as packet:
-                self._handle_subscribe_packet(packet)
+                self._handle_subscribe_packet(context, packet)
             case _:
-                self.ctx.send_outbound(DisconnectRequestEvent())
+                context.send_outbound(DisconnectRequestEvent())
 
-    def _handle_subscribe_packet(self, packet: SubscribePacket) -> None:
-        self.ctx.send_outbound(
+    def _handle_subscribe_packet(self, context: HandlerContext, packet: SubscribePacket) -> None:
+        context.send_outbound(
             DataEvent(
                 data=self._connection.send_sub_ack_packet(
                     message_identifier=packet.message_identifier,
@@ -59,9 +60,9 @@ class MqttSession(Layer):
 
         for subscription in packet.subscriptions:
             if subscription.topic_filter == "$SYS/#":
-                self._publish_sys_topics()
+                self._publish_sys_topics(context)
 
-    def _publish_sys_topics(self) -> None:
+    def _publish_sys_topics(self, context: HandlerContext) -> None:
         output = [
             ("$SYS/broker/version", b"mosquitto version 2.1.2"),
             ("$SYS/broker/uptime", b"18590 seconds"),
@@ -121,7 +122,7 @@ class MqttSession(Layer):
         ]
 
         for topic_name, message in output:
-            self.ctx.send_outbound(
+            context.send_outbound(
                 DataEvent(
                     data=self._connection.send_publish_packet(topic_name=topic_name, message=message, retain=True)
                 )
