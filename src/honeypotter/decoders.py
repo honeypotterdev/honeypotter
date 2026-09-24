@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from honeypotter.constants import CR, LF
-from honeypotter.core import Context, Layer
+from honeypotter.core import Handler, HandlerContext
 from honeypotter.transport import DataEvent
 
 
@@ -11,14 +11,15 @@ class LineEvent:
     line: bytes
 
 
-class LineDecoder(Layer):
-    def __init__(self, context: Context) -> None:
-        super().__init__(context)
+class LineDecoderHandler(Handler):
+    def __init__(self) -> None:
+        super().__init__()
+
         self._buffer = bytearray()
 
-    def handle_inbound(self, event: Any) -> None:
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if not isinstance(event, DataEvent):
-            super().handle_inbound(event)
+            super().handle_inbound(context, event)
             return
 
         for byte in event.data:
@@ -26,5 +27,5 @@ class LineDecoder(Layer):
                 self._buffer.append(byte)
                 continue
 
-            self.ctx.send_inbound(LineEvent(line=bytes(self._buffer)))
+            context.send_inbound(LineEvent(line=bytes(self._buffer)))
             self._buffer.clear()

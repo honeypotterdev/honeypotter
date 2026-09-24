@@ -65,7 +65,7 @@ class TrafficLoggingHandler(Handler):
         super().handle_outbound(context, event)
 
 
-class NewIpRateLimiter:
+class IpRateLimiter:
     def __init__(self) -> None:
         self._rate_limiter = RateLimiter[str](
             burst=10,
