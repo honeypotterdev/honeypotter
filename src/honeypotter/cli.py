@@ -4,16 +4,17 @@ from collections.abc import Callable
 
 import click
 
-from honeypotter.core import Context, Layer
+from honeypotter.core import Context, Handler, Layer
 from honeypotter.decoders import LineDecoder
 from honeypotter.exporters import TelnetConnectionExporter
+from honeypotter.handlers import InboundIdleTimeoutHandler, NewIpRateLimiter, TrafficLoggingHandler
 from honeypotter.layers import InboundIdleTimeoutLayer, IpRateLimiter, TrafficLoggingLayer
-from honeypotter.mqtt.session import MqttSession
+from honeypotter.mqtt.session import MqttSessionHandler
 from honeypotter.redis.exporter import RedisConnectionExporter
 from honeypotter.redis.session import RedisSession
 from honeypotter.shell import ShellSession
 from honeypotter.telnet import TelnetCodec, TelnetSession
-from honeypotter.transport import TransportProtocolFactory
+from honeypotter.transport import NewTransportProtocolFactory, TransportProtocolFactory
 
 _logger = logging.getLogger(__name__)
 
@@ -110,18 +111,20 @@ async def _run_mqtt_server(*, host: str, port: int) -> None:
 
     _logger.info("Starting server on %s:%s", host, port)
 
-    ip_rate_limiter = IpRateLimiter()
+    ip_rate_limiter = NewIpRateLimiter()
 
-    layer_factories: list[Callable[[Context], Layer]] = [
-        ip_rate_limiter.layer_factory,
-        InboundIdleTimeoutLayer,
-        TrafficLoggingLayer,
-        MqttSession,
+    handler_factories: list[Callable[..., Handler]] = [
+        ip_rate_limiter.handler_factory,
+        InboundIdleTimeoutHandler,
+        TrafficLoggingHandler,
+        MqttSessionHandler,
     ]
 
-    _logger.debug("Layers: %s", layer_factories)
+    _logger.debug("Handlers: %s", handler_factories)
 
-    server = await loop.create_server(TransportProtocolFactory(layer_factories=layer_factories), host=host, port=port)
+    server = await loop.create_server(
+        NewTransportProtocolFactory(handler_factories=handler_factories), host=host, port=port
+    )
 
     async with server:
         await server.serve_forever()

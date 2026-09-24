@@ -6,6 +6,7 @@ from typing import Any
 _logger = logging.getLogger(__name__)
 
 
+# TODO: Delete
 class Context:
     layer: Layer
 
@@ -41,6 +42,7 @@ class Context:
         self.prev.layer.handle_outbound(event)
 
 
+# TODO: Delete
 class Channel:
     def __init__(self) -> None:
         self.metadata: dict[str, Any] = {}
@@ -61,6 +63,7 @@ class Channel:
         return layer
 
 
+# TODO: Delete
 class Layer:
     def __init__(self, context: Context):
         self.ctx = context

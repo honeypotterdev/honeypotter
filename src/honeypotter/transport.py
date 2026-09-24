@@ -99,9 +99,13 @@ class TransportPipeline(Pipeline):
         self._transport = transport
 
     def handle_outbound(self, event: Any) -> None:
-        assert isinstance(event, DataEvent)
+        if isinstance(event, DataEvent):
+            self._transport.write(event.data)
+            return
 
-        self._transport.write(event.data)
+        if isinstance(event, DisconnectRequestEvent):
+            self._transport.close()
+            return
 
 
 class NewTransportProtocol(asyncio.Protocol):
