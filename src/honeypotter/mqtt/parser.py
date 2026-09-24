@@ -1,7 +1,7 @@
 from enum import Enum, auto
 from typing import Any
 
-from honeypotter.mqtt.utils import remaining_length_decode
+from honeypotter.mqtt.utils import decode_remaining_length, decode_utf8_string
 from honeypotter.mqtt.values import (
     ConnectPacket,
     DisconnectPacket,
@@ -10,7 +10,7 @@ from honeypotter.mqtt.values import (
     SubscribePacket,
     Subscription,
 )
-from honeypotter.statemachine import Rule, StateMachine, UnhandledEventError
+from honeypotter.statemachine import Rule, StateMachine, StateMachineError
 
 
 class State(Enum):
@@ -25,7 +25,7 @@ class ControlPacketType(Enum):
 
 
 class MqttParseError(Exception):
-    def __init__(self, message: str, *, state: State, byte: int) -> None:
+    def __init__(self, message: str, *, state: State | None = None, byte: int | None = None) -> None:
         super().__init__(message)
         self.state = state
         self.byte = byte
@@ -93,7 +93,7 @@ class MqttParser(StateMachine):
     def feed_byte(self, byte: int) -> Packet | None:
         try:
             return self.send("byte", byte)
-        except UnhandledEventError as e:
+        except StateMachineError as e:
             error = MqttParseError("Unhandled event occurred", state=self._current_state, byte=byte)
             self._transition_to(State.FAILED)
             raise error from e
@@ -116,8 +116,13 @@ class MqttParser(StateMachine):
 
     def finish_remaining_length(self, byte: int) -> None:
         self._buffer.append(byte)
-        self._packet_length = remaining_length_decode(self._buffer)
-        self._buffer.clear()
+
+        try:
+            self._packet_length = decode_remaining_length(self._buffer)
+        except ValueError as e:
+            raise MqttParseError("Error parsing remaining length", state=self._current_state, byte=byte) from e
+        finally:
+            self._buffer.clear()
 
     def has_remaining_length(self, byte: int) -> bool:
         self._packet_length -= 1
@@ -156,12 +161,9 @@ class _MqttReader:
         return len(self._view) - self._position
 
     def read_bytes(self, length: int) -> bytes:
-        if length < 0:
-            raise ValueError("Read length must not be negative")
-
         end = self._position + length
         if end > len(self._view):
-            raise ValueError(f"Truncated packet at offset {self._position}: expected {length} bytes")
+            raise MqttParseError(f"Truncated packet at offset {self._position}: expected {length} bytes")
 
         value = self._view[self._position : end]
         self._position = end
@@ -180,12 +182,10 @@ class _MqttReader:
 
     def read_utf8_string(self) -> str:
         """Read a length-prefixed string and validate MQTT UTF-8 requirements."""
-        value = self.read_length_prefixed_bytes().decode("utf-8")
 
-        if "\x00" in value:
-            raise ValueError("MQTT strings must not contain U+0000")
+        value = self.read_length_prefixed_bytes()
 
-        return value
+        return decode_utf8_string(value)
 
     def read_remaining_bytes(self) -> bytes:
         return self.read_bytes(self.remaining)
@@ -281,9 +281,9 @@ def _parse_disconnect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Di
     remaining = reader.read_remaining_bytes()
 
     if remaining != b"\x00":
-        raise ValueError("MQTT disconnect packet must not contain \x00")
+        raise MqttParseError("MQTT disconnect packet must not contain \x00")
 
     if reader.remaining:
-        raise ValueError("Unexpected trailing bytes in DISCONNECT packet")
+        raise MqttParseError("Unexpected trailing bytes in DISCONNECT packet")
 
     return DisconnectPacket()

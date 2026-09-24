@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from enum import IntEnum
 
-from honeypotter.mqtt.utils import remaining_length_encode
+from honeypotter.mqtt.utils import encode_remaining_length
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -10,7 +10,7 @@ class ConnectPacket:
     protocol_level: int = 4
     clean_session: bool = True
     keep_alive: int = 60
-    client_id: str | None = None
+    client_id: str = ""
     will_topic: str | None = None
     will_message: bytes | None = None
     will_qos: int = 0
@@ -46,7 +46,7 @@ class ConnectPacket:
             + keep_alive_bytes
         )
 
-        if self.client_id is not None:
+        if self.client_id:
             client_id_bytes = self.client_id.encode("utf-8")
             client_id_length_bytes = len(client_id_bytes).to_bytes(length=2)
         else:
@@ -66,7 +66,7 @@ class ConnectPacket:
         if self.password is not None:
             payload += len(self.password).to_bytes(length=2) + self.password
 
-        remaining_length = remaining_length_encode(len(variable_header + payload))
+        remaining_length = encode_remaining_length(len(variable_header + payload))
 
         return b"\x10" + remaining_length + variable_header + payload
 
@@ -89,7 +89,7 @@ class ConnAckPacket:
         ack_flags_bytes = int(self.session_present).to_bytes()
         return_code_bytes = self.return_code.to_bytes()
         variable_header = ack_flags_bytes + return_code_bytes
-        remaining_length = remaining_length_encode(len(variable_header))
+        remaining_length = encode_remaining_length(len(variable_header))
 
         return b"\x20" + remaining_length + variable_header
 
@@ -122,7 +122,7 @@ class PublishPacket:
         if self.message_identifier is not None:
             variable_header += self.message_identifier.to_bytes(length=2)
 
-        remaining_length = remaining_length_encode(len(variable_header + self.message))
+        remaining_length = encode_remaining_length(len(variable_header + self.message))
 
         return header_bytes + remaining_length + variable_header + self.message
 
@@ -133,7 +133,7 @@ class PubAckPacket:
 
     def to_bytes(self) -> bytes:
         variable_header = self.message_identifier.to_bytes(length=2)
-        remaining_length = remaining_length_encode(len(variable_header))
+        remaining_length = encode_remaining_length(len(variable_header))
 
         return b"\x40" + remaining_length + variable_header
 
@@ -161,7 +161,7 @@ class SubscribePacket:
                 + subscription.qos.to_bytes()
             )
 
-        remaining_length = remaining_length_encode(len(variable_header + payload))
+        remaining_length = encode_remaining_length(len(variable_header + payload))
 
         return b"\x82" + remaining_length + variable_header + payload
 
@@ -174,7 +174,7 @@ class SubAckPacket:
     def to_bytes(self) -> bytes:
         variable_header = self.message_identifier.to_bytes(length=2)
         payload = b"".join(code.to_bytes() for code in self.return_codes)
-        remaining_length = remaining_length_encode(len(variable_header + payload))
+        remaining_length = encode_remaining_length(len(variable_header + payload))
 
         return b"\x90" + remaining_length + variable_header + payload
 
