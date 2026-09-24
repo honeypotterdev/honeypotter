@@ -10,7 +10,7 @@ from honeypotter.mqtt.values import (
     SubscribePacket,
     Subscription,
 )
-from honeypotter.statemachine import MachineTerminatedError, Rule, StateMachine, UnhandledEventError
+from honeypotter.statemachine import Rule, StateMachine, StateMachineError
 
 
 class State(Enum):
@@ -93,7 +93,7 @@ class MqttParser(StateMachine):
     def feed_byte(self, byte: int) -> Packet | None:
         try:
             return self.send("byte", byte)
-        except (UnhandledEventError, MachineTerminatedError) as e:
+        except StateMachineError as e:
             error = MqttParseError("Unhandled event occurred", state=self._current_state, byte=byte)
             self._transition_to(State.FAILED)
             raise error from e
@@ -116,8 +116,13 @@ class MqttParser(StateMachine):
 
     def finish_remaining_length(self, byte: int) -> None:
         self._buffer.append(byte)
-        self._packet_length = decode_remaining_length(self._buffer)
-        self._buffer.clear()
+
+        try:
+            self._packet_length = decode_remaining_length(self._buffer)
+        except ValueError as e:
+            raise MqttParseError("Error parsing remaining length", state=self._current_state, byte=byte) from e
+        finally:
+            self._buffer.clear()
 
     def has_remaining_length(self, byte: int) -> bool:
         self._packet_length -= 1
@@ -276,9 +281,9 @@ def _parse_disconnect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Di
     remaining = reader.read_remaining_bytes()
 
     if remaining != b"\x00":
-        raise ValueError("MQTT disconnect packet must not contain \x00")
+        raise MqttParseError("MQTT disconnect packet must not contain \x00")
 
     if reader.remaining:
-        raise ValueError("Unexpected trailing bytes in DISCONNECT packet")
+        raise MqttParseError("Unexpected trailing bytes in DISCONNECT packet")
 
     return DisconnectPacket()

@@ -1,8 +1,10 @@
+from contextlib import suppress
+
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from honeypotter.mqtt.parser import MqttParser
+from honeypotter.mqtt.parser import MqttParseError, MqttParser
 from honeypotter.mqtt.values import ConnectPacket
 
 
@@ -26,3 +28,11 @@ class TestMqttParser:
         packets = [packet for byte in connect.to_bytes() if (packet := parser.feed_byte(byte)) is not None]
 
         assert packets == [connect]
+
+    @given(data=st.binary())
+    def test_general_fuzz(self, data: bytes) -> None:
+        parser = MqttParser()
+
+        for byte in data:
+            with suppress(MqttParseError):
+                parser.feed_byte(byte)
