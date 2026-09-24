@@ -77,10 +77,14 @@ class Layer:
 
 class HandlerContext:
     def __init__(self, pipeline: Pipeline, handler: Handler) -> None:
-        self.pipeline = pipeline
+        self._pipeline = pipeline
         self.handler = handler
         self.next: HandlerContext | None = None
         self.prev: HandlerContext | None = None
+
+    @property
+    def pipeline(self) -> Pipeline:
+        return self._pipeline
 
     def send_inbound(self, event: Any) -> None:
         if self.next is None:
