@@ -89,7 +89,7 @@ class MqttParser:
         try:
             return self._machine.trigger("byte", byte)
         except MachineError as e:
-            error = MqttParseError("Unhandled event occurred", state=self._machine.state, byte=byte)
+            error = MqttParseError("Machine error occurred", state=self._machine.state, byte=byte)
             self._machine.transition_to(State.FAILED)
             raise error from e
 
