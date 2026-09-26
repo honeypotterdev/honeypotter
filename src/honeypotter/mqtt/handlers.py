@@ -16,19 +16,21 @@ class MqttHandler(Handler):
         self._connection = MqttConnection()
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, DataEvent):
-            events = self._connection.receive_data(event.data)
+        match event:
+            case DataEvent():
+                self._handle_data_event(context, event)
+            case _:
+                super().handle_inbound(context, event)
 
-            _logger.debug(f"Received events: {events!r}")
+    def _handle_data_event(self, context: HandlerContext, event: DataEvent) -> None:
+        events = self._connection.receive_data(event.data)
 
-            for connection_event in events:
-                self._handle_event(context, connection_event)
+        _logger.debug(f"Received events: {events!r}")
 
-            return
+        for connection_event in events:
+            self._handle_connection_event(context, connection_event)
 
-        super().handle_inbound(context, event)
-
-    def _handle_event(self, context: HandlerContext, event: ConnectionEvent) -> None:
+    def _handle_connection_event(self, context: HandlerContext, event: ConnectionEvent) -> None:
         match event:
             case ConnectPacket():
                 context.send_outbound(DataEvent(data=self._connection.send_conn_ack_packet()))
