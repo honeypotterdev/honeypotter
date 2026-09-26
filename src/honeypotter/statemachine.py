@@ -175,6 +175,26 @@ class Machine[S]:
         if self._final is not None and state == self._final:
             self._in_final_state = True
 
+    def generate_mermaid_diagram(self, title: str) -> str:
+        transitions = [f"[*] --> {self._get_node_name(self._initial)}"]
+
+        for transition in self._transitions:
+            source = self._get_node_name(transition.source)
+            target = self._get_node_name(transition.target)
+            event = self._get_node_name(transition.event)
+
+            comment = event
+
+            if transition.condition is not None:
+                comment = f"{comment}[{transition.condition}]"
+
+            transitions.append(f"{source} --> {target}: {comment}")
+
+        if self._final is not None:
+            transitions.append(f"{self._get_node_name(self._final)} --> [*]")
+
+        return f"---\ntitle: {title}\n---\nstateDiagram-v2\n{'\n'.join(transitions)}"
+
     def _create_transition_table(self, transitions: list[Transition[S]]) -> dict[tuple[str, S], list[Transition[S]]]:
         table = defaultdict(list)
 
@@ -182,3 +202,9 @@ class Machine[S]:
             table[(transition.event, transition.source)].append(transition)
 
         return table
+
+    def _get_node_name(self, state: Any) -> str:
+        if isinstance(state, Enum):
+            return state.name
+
+        return str(state)
