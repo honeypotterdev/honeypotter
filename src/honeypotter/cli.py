@@ -11,7 +11,7 @@ from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, Traff
 from honeypotter.mqtt.session import MqttSessionHandler
 from honeypotter.redis.exporter import RedisConnectionExporter
 from honeypotter.redis.session import RedisSessionHandler
-from honeypotter.shell import ShellSessionHandler
+from honeypotter.shell.handlers import BusyboxShellHandler
 from honeypotter.telnet import TelnetCodecHandler, TelnetSessionHandler
 from honeypotter.transport import TransportProtocolFactory
 
@@ -48,7 +48,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
         TelnetCodecHandler,
         TelnetSessionHandler,
         LineDecoderHandler,
-        ShellSessionHandler,
+        BusyboxShellHandler,
     ]
 
     if api_key is not None:
