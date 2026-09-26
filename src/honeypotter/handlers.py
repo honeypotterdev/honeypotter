@@ -87,14 +87,16 @@ class IpRateLimiterHandler(Handler):
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
             case ConnectionMadeEvent():
-                self._handle_connection_made(context)
+                self._handle_connection_made(context, event)
             case _:
                 super().handle_inbound(context, event)
 
-    def _handle_connection_made(self, context: HandlerContext) -> None:
+    def _handle_connection_made(self, context: HandlerContext, event: ConnectionMadeEvent) -> None:
         client_ip = context.pipeline.metadata["peername"][0]
 
-        if not self._rate_limiter.is_allowed(client_ip):
+        if self._rate_limiter.is_allowed(client_ip):
+            context.send_inbound(event)
+        else:
             _logger.debug("Rate limit reached for %s", client_ip)
             context.send_outbound(DisconnectRequestEvent())
 
