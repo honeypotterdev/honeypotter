@@ -7,9 +7,9 @@ import click
 from honeypotter.core import Handler
 from honeypotter.exporters import TelnetConnectionExporter
 from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, TrafficLoggingHandler
-from honeypotter.mqtt.session import MqttSessionHandler
-from honeypotter.redis.exporter import RedisConnectionExporter
-from honeypotter.redis.session import RedisSessionHandler
+from honeypotter.mqtt.handlers import MqttHandler
+from honeypotter.redis.exporters import RedisConnectionExporter
+from honeypotter.redis.handlers import RedisHandler
 from honeypotter.shell.handlers import BusyboxShellHandler
 from honeypotter.telnet import TelnetCodecHandler, TelnetSessionHandler
 from honeypotter.transport import TransportProtocolFactory
@@ -84,7 +84,7 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
         ip_rate_limiter.handler_factory,
         InboundIdleTimeoutHandler,
         TrafficLoggingHandler,
-        RedisSessionHandler,
+        RedisHandler,
     ]
 
     if api_key is not None:
@@ -119,7 +119,7 @@ async def _run_mqtt_server(*, host: str, port: int) -> None:
         ip_rate_limiter.handler_factory,
         InboundIdleTimeoutHandler,
         TrafficLoggingHandler,
-        MqttSessionHandler,
+        MqttHandler,
     ]
 
     _logger.debug("Handlers: %s", handler_factories)

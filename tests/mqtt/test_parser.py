@@ -5,7 +5,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from honeypotter.mqtt.packets import ConnectPacket
-from honeypotter.mqtt.parser import MqttParseError, MqttParser
+from honeypotter.mqtt.parsers import MqttParseError, MqttParser
 
 
 class TestMqttParser:

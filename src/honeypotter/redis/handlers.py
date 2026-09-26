@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.redis.protocol import ConnectionEvent, RedisConnection
+from honeypotter.redis.sans import ConnectionEvent, RedisConnection
 from honeypotter.redis.utils import InfoProvider
 from honeypotter.redis.values import Array, BulkString, RespValue
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
@@ -11,7 +11,7 @@ _logger = logging.getLogger(__name__)
 _info_provider = InfoProvider()
 
 
-class RedisSessionHandler(Handler):
+class RedisHandler(Handler):
     def __init__(self) -> None:
         super().__init__()
 

@@ -11,7 +11,7 @@ from honeypotter.mqtt.packets import (
     SubscribePacket,
     Subscription,
 )
-from honeypotter.mqtt.parser import MqttParseError, MqttParser
+from honeypotter.mqtt.parsers import MqttParseError, MqttParser
 
 
 @dataclass(frozen=True, kw_only=True)

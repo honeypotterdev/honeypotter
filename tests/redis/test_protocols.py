@@ -1,6 +1,6 @@
 import pytest
 
-from honeypotter.redis.protocol import ProtocolErrorOccurred, RedisConnection
+from honeypotter.redis.sans import ProtocolErrorOccurred, RedisConnection
 from honeypotter.redis.values import Array, BulkString, NullBulkString, SimpleString
 
 
