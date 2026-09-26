@@ -1,27 +1,19 @@
-from typing import Any
-
 from honeypotter.core import Handler, HandlerContext
 from honeypotter.test import StubPipeline
 
 
 class UppercaseHandler(Handler):
-    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        assert isinstance(event, bytes)
-
+    def handle_inbound(self, context: HandlerContext, event: bytes) -> None:
         context.send_inbound(event.upper())
 
 
 class WrapHandler(Handler):
-    def handle_outbound(self, context: HandlerContext, event: Any) -> None:
-        assert isinstance(event, bytes)
-
+    def handle_outbound(self, context: HandlerContext, event: bytes) -> None:
         context.send_outbound(b"(" + event + b")")
 
 
 class ReverseHandler(Handler):
-    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        assert isinstance(event, bytes)
-
+    def handle_inbound(self, context: HandlerContext, event: bytes) -> None:
         context.send_outbound(bytes(reversed(event)))
 
 

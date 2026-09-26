@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from honeypotter.constants import CR, LF
 from honeypotter.core import Handler, HandlerContext
@@ -43,14 +43,14 @@ class MessageLoggingHandler(Handler):
     def __init__(self) -> None:
         super().__init__()
 
-        self._messages: list[tuple[str, bytes]] = []
+        self._messages: list[tuple[Literal["inbound", "outbound"], bytes]] = []
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
             case DataEvent():
                 self._messages.append(("inbound", event.data))
             case ConnectionLostEvent():
-                self._handle_connection_lost(context, event)
+                self._handle_connection_lost(context)
 
         super().handle_inbound(context, event)
 
@@ -60,7 +60,7 @@ class MessageLoggingHandler(Handler):
 
         super().handle_outbound(context, event)
 
-    def _handle_connection_lost(self, context: HandlerContext, event: ConnectionLostEvent) -> None:
+    def _handle_connection_lost(self, context: HandlerContext) -> None:
         _logger.debug(
             "Connection lost. Metadata: %s, Messages: %s", repr(context.pipeline.metadata), repr(self._messages)
         )
@@ -87,11 +87,11 @@ class IpRateLimiterHandler(Handler):
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
             case ConnectionMadeEvent():
-                self._handle_connection_made(context, event)
+                self._handle_connection_made(context)
             case _:
                 super().handle_inbound(context, event)
 
-    def _handle_connection_made(self, context: HandlerContext, event: ConnectionMadeEvent) -> None:
+    def _handle_connection_made(self, context: HandlerContext) -> None:
         client_ip = context.pipeline.metadata["peername"][0]
 
         if not self._rate_limiter.is_allowed(client_ip):
