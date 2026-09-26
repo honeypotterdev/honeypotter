@@ -5,13 +5,13 @@ from collections.abc import Callable
 import click
 
 from honeypotter.core import Handler
-from honeypotter.exporters import TelnetConnectionExporter
 from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, TrafficLoggingHandler
 from honeypotter.mqtt.handlers import MqttHandler
 from honeypotter.redis.exporters import RedisConnectionExporter
 from honeypotter.redis.handlers import RedisHandler
 from honeypotter.shell.handlers import BusyboxShellHandler
-from honeypotter.telnet import TelnetCodecHandler, TelnetSessionHandler
+from honeypotter.telnet.exporters import TelnetConnectionExporter
+from honeypotter.telnet.legacy import TelnetCodecHandler, TelnetSessionHandler
 from honeypotter.transport import TransportProtocolFactory
 
 _logger = logging.getLogger(__name__)
