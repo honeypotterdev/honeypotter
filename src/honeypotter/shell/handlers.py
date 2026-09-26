@@ -3,7 +3,7 @@ from enum import Enum, auto
 from typing import Any
 
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.decoders import LineEvent
+from honeypotter.handlers import LineEvent
 from honeypotter.shell.emulators import BusyboxEmulator
 from honeypotter.transport import ConnectionMadeEvent, DataEvent
 

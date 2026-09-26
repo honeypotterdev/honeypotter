@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, call
 
 from honeypotter.core import HandlerContext
-from honeypotter.decoders import LineEvent
+from honeypotter.handlers import LineEvent
 from honeypotter.shell.handlers import BusyboxShellHandler
 from honeypotter.transport import ConnectionMadeEvent, DataEvent
 

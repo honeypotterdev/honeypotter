@@ -5,9 +5,8 @@ from collections.abc import Callable
 import click
 
 from honeypotter.core import Handler
-from honeypotter.decoders import LineDecoderHandler
 from honeypotter.exporters import TelnetConnectionExporter
-from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, TrafficLoggingHandler
+from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, TrafficLoggingHandler
 from honeypotter.mqtt.session import MqttSessionHandler
 from honeypotter.redis.exporter import RedisConnectionExporter
 from honeypotter.redis.session import RedisSessionHandler

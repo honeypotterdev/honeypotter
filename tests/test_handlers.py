@@ -1,7 +1,7 @@
 from unittest.mock import Mock, call
 
 from honeypotter.core import HandlerContext
-from honeypotter.decoders import LineDecoderHandler, LineEvent
+from honeypotter.handlers import LineDecoderHandler, LineEvent
 from honeypotter.transport import DataEvent
 
 
