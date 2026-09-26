@@ -1,41 +1,36 @@
 from typing import Any
 
-from honeypotter.core import Handler, HandlerContext, Pipeline
+from honeypotter.core import Handler, HandlerContext
+from honeypotter.test import StubPipeline
 
 
 class UppercaseHandler(Handler):
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, bytes):
-            context.send_inbound(event.upper())
-            return
+        assert isinstance(event, bytes)
 
-        super().handle_inbound(context, event)
+        context.send_inbound(event.upper())
+
+
+class WrapHandler(Handler):
+    def handle_outbound(self, context: HandlerContext, event: Any) -> None:
+        assert isinstance(event, bytes)
+
+        context.send_outbound(b"(" + event + b")")
 
 
 class ReverseHandler(Handler):
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, bytes):
-            context.send_outbound(bytes(reversed(event)))
-            return
+        assert isinstance(event, bytes)
 
-        super().handle_inbound(context, event)
+        context.send_outbound(bytes(reversed(event)))
 
 
-class QueuePipeline(Pipeline):
-    def __init__(self) -> None:
-        super().__init__()
-
-        self.outbound_queue = []
-
-    def handle_outbound(self, event: Any) -> None:
-        self.outbound_queue.append(event)
-
-
-class TestQueuePipeline:
+class TestPipeline:
     def test(self) -> None:
-        pipeline = QueuePipeline()
+        pipeline = StubPipeline()
         pipeline.add_handler(UppercaseHandler())
+        pipeline.add_handler(WrapHandler())
         pipeline.add_handler(ReverseHandler())
         pipeline.send_inbound(b"foo")
 
-        assert pipeline.outbound_queue == [b"OOF"]
+        assert pipeline.outbound_queue == [b"(OOF)"]
