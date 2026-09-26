@@ -1,3 +1,3 @@
-CR = int.from_bytes(b"\r")
-LF = int.from_bytes(b"\n")
-NUL = int.from_bytes(b"\0")
+CR = ord(b"\r")
+LF = ord(b"\n")
+NUL = ord(b"\0")

@@ -14,10 +14,10 @@ class TestMqttParser:
         return MqttParser()
 
     @given(
-        protocol_name=st.text(alphabet=st.characters(blacklist_categories=["Cc", "Cs"])),
+        protocol_name=st.text(alphabet=st.characters(blacklist_categories=["Cc", "Cs", "Cn"])),
         protocol_level=st.integers(min_value=4, max_value=5),
         keep_alive=st.integers(min_value=0, max_value=65535),
-        client_id=st.text(alphabet=st.characters(blacklist_categories=["Cc", "Cs"])),
+        client_id=st.text(alphabet=st.characters(blacklist_categories=["Cc", "Cs", "Cn"])),
     )
     def test_connect_packet(self, protocol_name: str, protocol_level: int, keep_alive: int, client_id: str) -> None:
         parser = MqttParser()

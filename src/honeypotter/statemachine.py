@@ -1,115 +1,107 @@
-from abc import ABC, abstractmethod
 from collections import defaultdict
 from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
 
-@dataclass(frozen=True, kw_only=True)
-class Rule:
-    source: Any
-    event: Any
-    target: Any
+class MachineError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transition[S, E]:
+    event: E
+    source: S
+    target: S
     condition: str | None = None
     action: str | None = None
 
 
-class StateMachineError(Exception):
-    pass
+class Machine[S, E]:
+    def __init__(
+        self,
+        *,
+        model: Any,
+        initial: S,
+        final: S | None = None,
+        transitions: list[Transition[S, E]],
+        raise_on_invalid_transition: bool = True,
+    ) -> None:
+        self._model = model
+        self._initial = initial
+        self._final = final
+        self._transitions = transitions
+        self._raise_on_invalid_transition = raise_on_invalid_transition
 
-
-class UnhandledEventError(StateMachineError):
-    pass
-
-
-class MachineTerminatedError(StateMachineError):
-    pass
-
-
-class StateMachine(ABC):
-    def __init__(self) -> None:
-        self._current_state = self.get_initial_state()
-        self._transitions = self._create_transitions()
+        self._state = initial
+        self._transition_table = self._create_transition_table(transitions)
+        self._in_final_state = False
 
     @property
-    def is_terminated(self) -> bool:
-        final_state = self.get_final_state()
+    def state(self) -> S:
+        return self._state
 
-        return final_state is not None and self._current_state == final_state
+    def trigger(self, event: E, *args: Any, **kwargs: Any) -> Any:
+        if self._in_final_state:
+            raise MachineError(f"Can't trigger event {event} from final state {self._state}")
 
-    @abstractmethod
-    def get_initial_state(self) -> Any: ...
-
-    def get_final_state(self) -> Any:
-        return None
-
-    @abstractmethod
-    def get_rules(self) -> list[Rule]: ...
-
-    def get_current_state(self) -> Any:
-        return self._current_state
-
-    def send(self, event: Any, *args: Any, **kwargs: Any) -> Any | None:
-        if self.is_terminated:
-            raise MachineTerminatedError
-
-        candidates = self._transitions[(self._current_state, event)]
+        candidates = self._transition_table[(self._state, event)]
 
         for candidate in candidates:
             if candidate.condition is not None:
-                condition_callback = getattr(self, candidate.condition)
+                condition_callback = getattr(self._model, candidate.condition)
 
                 if not condition_callback(*args, **kwargs):
                     continue
 
-            self._transition_to(candidate.target)
+            self.transition_to(candidate.target)
 
             if candidate.action is None:
                 return None
 
-            action_callback = getattr(self, candidate.action)
+            action_callback = getattr(self._model, candidate.action)
             return action_callback(*args, **kwargs)
 
-        self.on_unhandled_event(event, *args, **kwargs)
+        if self._raise_on_invalid_transition:
+            raise MachineError(f"Can't trigger event {event} from state {self._state}")
 
         return None
 
-    def on_unhandled_event(self, event: Any, *args: Any, **kwargs: Any) -> None:
-        raise UnhandledEventError(
-            f"Unhandled event: {event!r}, state: {self._current_state!r}, args: {args!r}, kwargs: {kwargs!r}"
-        )
+    def transition_to(self, state: S) -> None:
+        self._state = state
 
-    def get_mermaid_diagram(self) -> str:
-        title = self.__class__.__name__
-        transitions = [f"[*] --> {self._get_node_name(self.get_initial_state())}"]
+        if self._final is not None and state == self._final:
+            self._in_final_state = True
 
-        for rule in self.get_rules():
-            source = self._get_node_name(rule.source)
-            target = self._get_node_name(rule.target)
-            event = self._get_node_name(rule.event)
+    def generate_mermaid_diagram(self, title: str) -> str:
+        transitions = [f"[*] --> {self._get_node_name(self._initial)}"]
+
+        for transition in self._transitions:
+            source = self._get_node_name(transition.source)
+            target = self._get_node_name(transition.target)
+            event = self._get_node_name(transition.event)
 
             comment = event
 
-            if rule.condition is not None:
-                comment = f"{comment}[{rule.condition}]"
+            if transition.condition is not None:
+                comment = f"{comment}[{transition.condition}]"
 
             transitions.append(f"{source} --> {target}: {comment}")
 
-        if self.get_final_state() is not None:
-            transitions.append(f"{self._get_node_name(self.get_final_state())} --> [*]")
+        if self._final is not None:
+            transitions.append(f"{self._get_node_name(self._final)} --> [*]")
 
         return f"---\ntitle: {title}\n---\nstateDiagram-v2\n{'\n'.join(transitions)}"
 
-    def _create_transitions(self) -> dict[tuple[Any, Any], list[Rule]]:
-        transitions = defaultdict(list)
+    def _create_transition_table(
+        self, transitions: list[Transition[S, E]]
+    ) -> dict[tuple[S, E], list[Transition[S, E]]]:
+        table = defaultdict(list)
 
-        for rule in self.get_rules():
-            transitions[(rule.source, rule.event)].append(rule)
+        for transition in transitions:
+            table[(transition.source, transition.event)].append(transition)
 
-        return transitions
-
-    def _transition_to(self, state: Any) -> None:
-        self._current_state = state
+        return table
 
     def _get_node_name(self, state: Any) -> str:
         if isinstance(state, Enum):
