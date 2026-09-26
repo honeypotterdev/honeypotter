@@ -69,7 +69,7 @@ class Pipeline(ABC):
     def handle_outbound(self, event: Any) -> None: ...
 
 
-class Handler:
+class Handler(ABC):
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         context.send_inbound(event)
 

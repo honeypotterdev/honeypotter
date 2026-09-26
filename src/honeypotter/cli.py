@@ -5,7 +5,7 @@ from collections.abc import Callable
 import click
 
 from honeypotter.core import Handler
-from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, TrafficLoggingHandler
+from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, MessageLoggingHandler
 from honeypotter.mqtt.handlers import MqttHandler
 from honeypotter.redis.exporters import RedisConnectionExporter
 from honeypotter.redis.handlers import RedisHandler
@@ -43,7 +43,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
     handler_factories: list[Callable[..., Handler]] = [
         ip_rate_limiter.handler_factory,
         InboundIdleTimeoutHandler,
-        TrafficLoggingHandler,
+        MessageLoggingHandler,
         TelnetCodecHandler,
         TelnetSessionHandler,
         LineDecoderHandler,
@@ -83,7 +83,7 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
     handler_factories: list[Callable[..., Handler]] = [
         ip_rate_limiter.handler_factory,
         InboundIdleTimeoutHandler,
-        TrafficLoggingHandler,
+        MessageLoggingHandler,
         RedisHandler,
     ]
 
@@ -118,7 +118,7 @@ async def _run_mqtt_server(*, host: str, port: int) -> None:
     handler_factories: list[Callable[..., Handler]] = [
         ip_rate_limiter.handler_factory,
         InboundIdleTimeoutHandler,
-        TrafficLoggingHandler,
+        MessageLoggingHandler,
         MqttHandler,
     ]
 

@@ -83,49 +83,47 @@ class RedisConnectionExporterHandler(Handler):
     def __init__(self, queue: asyncio.Queue[RedisConnectionDetails]) -> None:
         super().__init__()
 
-        self._conversation: list[TcpMessage] = []
+        self._messages: list[TcpMessage] = []
         self._initial_time = time.monotonic()
         self._created_at = datetime.now(tz=UTC)
         self._last_direction: Literal["inbound", "outbound"] | None = None
         self._queue = queue
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, ConnectionLostEvent):
-            has_inbound_messages = any(message.direction == "inbound" for message in self._conversation)
-
-            if has_inbound_messages:
-                self._queue.put_nowait(
-                    RedisConnectionDetails(
-                        honeypot_ip=context.pipeline.metadata["sockname"][0],
-                        honeypot_port=context.pipeline.metadata["sockname"][1],
-                        client_ip=context.pipeline.metadata["peername"][0],
-                        client_port=context.pipeline.metadata["peername"][1],
-                        commands=context.pipeline.metadata.get("redis.commands"),
-                        conversation=self._conversation,
-                        created_at=self._created_at,
-                    )
-                )
-
-            super().handle_inbound(context, event)
-            return
-
-        if isinstance(event, DataEvent):
-            self._record_data(direction="inbound", data=event.data)
+        match event:
+            case DataEvent():
+                self._record_message(direction="inbound", data=event.data)
+            case ConnectionLostEvent():
+                self._finalize_messages(context)
 
         super().handle_inbound(context, event)
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
-            self._record_data(direction="outbound", data=event.data)
+            self._record_message(direction="outbound", data=event.data)
 
         super().handle_outbound(context, event)
 
-    def _record_data(self, direction: Literal["inbound", "outbound"], data: bytes) -> None:
+    def _finalize_messages(self, context: HandlerContext) -> None:
+        if any(message.direction == "inbound" for message in self._messages):
+            self._queue.put_nowait(
+                RedisConnectionDetails(
+                    honeypot_ip=context.pipeline.metadata["sockname"][0],
+                    honeypot_port=context.pipeline.metadata["sockname"][1],
+                    client_ip=context.pipeline.metadata["peername"][0],
+                    client_port=context.pipeline.metadata["peername"][1],
+                    commands=context.pipeline.metadata.get("redis.commands"),
+                    conversation=self._messages,
+                    created_at=self._created_at,
+                )
+            )
+
+    def _record_message(self, direction: Literal["inbound", "outbound"], data: bytes) -> None:
         if self._last_direction is None or direction != self._last_direction:
-            self._conversation.append(
+            self._messages.append(
                 TcpMessage(direction=direction, offset=time.monotonic() - self._initial_time, data=data)
             )
         else:
-            self._conversation[-1].data += data
+            self._messages[-1].data += data
 
         self._last_direction = direction

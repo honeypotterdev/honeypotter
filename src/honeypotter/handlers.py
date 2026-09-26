@@ -1,7 +1,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from honeypotter.constants import CR, LF
 from honeypotter.core import Handler, HandlerContext
@@ -19,12 +19,12 @@ class InboundIdleTimeoutHandler(Handler):
         self._timeout_handle: asyncio.TimerHandle | None = None
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, ConnectionLostEvent):
-            self._cancel_timeout_callback()
-            super().handle_inbound(context, event)
-            return
+        match event:
+            case ConnectionLostEvent():
+                self._cancel_timeout_callback()
+            case _:
+                self._reset_timeout_callback(context)
 
-        self._reset_timeout_callback(context)
         super().handle_inbound(context, event)
 
     def _reset_timeout_callback(self, context: HandlerContext) -> None:
@@ -39,32 +39,31 @@ class InboundIdleTimeoutHandler(Handler):
         context.send_outbound(DisconnectRequestEvent())
 
 
-class TrafficLoggingHandler(Handler):
+class MessageLoggingHandler(Handler):
     def __init__(self) -> None:
         super().__init__()
 
-        self._traffic: list[tuple[str, bytes]] = []
+        self._messages: list[tuple[Literal["inbound", "outbound"], bytes]] = []
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, ConnectionLostEvent):
-            _logger.debug(
-                "Connection lost. Traffic: %s, metadata: %s",
-                repr(self._traffic),
-                repr(context.pipeline.metadata),
-            )
-            super().handle_inbound(context, event)
-            return
-
-        if isinstance(event, DataEvent):
-            self._traffic.append(("inbound", event.data))
+        match event:
+            case DataEvent():
+                self._messages.append(("inbound", event.data))
+            case ConnectionLostEvent():
+                self._handle_connection_lost(context)
 
         super().handle_inbound(context, event)
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
-            self._traffic.append(("outbound", event.data))
+            self._messages.append(("outbound", event.data))
 
         super().handle_outbound(context, event)
+
+    def _handle_connection_lost(self, context: HandlerContext) -> None:
+        _logger.debug(
+            "Connection lost. Metadata: %s, Messages: %s", repr(context.pipeline.metadata), repr(self._messages)
+        )
 
 
 class IpRateLimiter:
@@ -86,15 +85,18 @@ class IpRateLimiterHandler(Handler):
         self._rate_limiter = rate_limiter
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, ConnectionMadeEvent):
-            client_ip = context.pipeline.metadata["peername"][0]
+        match event:
+            case ConnectionMadeEvent():
+                self._handle_connection_made(context)
+            case _:
+                super().handle_inbound(context, event)
 
-            if not self._rate_limiter.is_allowed(client_ip):
-                _logger.debug("Rate limit reached for %s", client_ip)
-                context.send_outbound(DisconnectRequestEvent())
-                return
+    def _handle_connection_made(self, context: HandlerContext) -> None:
+        client_ip = context.pipeline.metadata["peername"][0]
 
-        super().handle_inbound(context, event)
+        if not self._rate_limiter.is_allowed(client_ip):
+            _logger.debug("Rate limit reached for %s", client_ip)
+            context.send_outbound(DisconnectRequestEvent())
 
 
 @dataclass(frozen=True)
