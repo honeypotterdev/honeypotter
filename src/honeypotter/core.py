@@ -1,6 +1,8 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any
+from collections import defaultdict
+from collections.abc import Callable
+from typing import Any, ClassVar, Literal
 
 _logger = logging.getLogger(__name__)
 
@@ -69,9 +71,55 @@ class Pipeline(ABC):
     def handle_outbound(self, event: Any) -> None: ...
 
 
-class Handler:
+def handle[H](direction: Literal["inbound", "outbound"], event_type: type, propagate: bool = False) -> Callable[[H], H]:
+    def decorator(f: H) -> H:
+        f._handler_direction = direction
+        f._handler_event_type = event_type
+        f._handler_propagate = propagate
+
+        return f
+
+    return decorator
+
+
+type _RegisteredHandler = tuple[type, bool, Callable[[Handler, HandlerContext, Any], None]]
+
+
+class Handler(ABC):
+    _registered_handlers: ClassVar[dict[Literal["inbound", "outbound"], list[_RegisteredHandler]]]
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+
+        cls._registered_handlers = defaultdict(list)
+
+        for method in cls.__dict__.values():
+            if hasattr(method, "_handler_event_type"):
+                direction = method._handler_direction
+                event_type = method._handler_event_type
+                propagate = method._handler_propagate
+                cls._registered_handlers[direction].append((event_type, propagate, method))
+
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        context.send_inbound(event)
+        if not self._registered_handlers["inbound"]:
+            context.send_inbound(event)
+            return
+
+        for event_type, propagate, handler in self._registered_handlers["inbound"]:
+            if isinstance(event, event_type):
+                handler(self, context, event)
+
+                if propagate:
+                    context.send_inbound(event)
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
-        context.send_outbound(event)
+        if not self._registered_handlers["outbound"]:
+            context.send_outbound(event)
+            return
+
+        for event_type, propagate, handler in self._registered_handlers["outbound"]:
+            if isinstance(event, event_type):
+                handler(self, context, event)
+
+                if propagate:
+                    context.send_outbound(event)
