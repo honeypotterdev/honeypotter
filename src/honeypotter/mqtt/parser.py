@@ -1,5 +1,4 @@
 from enum import Enum, auto
-from typing import Any
 
 from honeypotter.mqtt.utils import decode_remaining_length, decode_utf8_string
 from honeypotter.mqtt.values import (
@@ -10,7 +9,7 @@ from honeypotter.mqtt.values import (
     SubscribePacket,
     Subscription,
 )
-from honeypotter.statemachine import Machine, Rule, StateMachine, StateMachineError, Transition
+from honeypotter.statemachine import Machine, MachineError, Transition
 
 
 class State(Enum):
@@ -31,10 +30,8 @@ class MqttParseError(Exception):
         self.byte = byte
 
 
-class MqttParser(StateMachine):
+class MqttParser:
     def __init__(self) -> None:
-        super().__init__()
-
         self._buffer = bytearray()
         self._packet_type = 0
         self._packet_flags = 0
@@ -89,62 +86,12 @@ class MqttParser(StateMachine):
             ],
         )
 
-    def get_initial_state(self) -> Any:
-        return State.READ_TYPE_AND_FLAGS
-
-    def get_rules(self) -> list[Rule]:
-        return [
-            Rule(
-                source=State.READ_TYPE_AND_FLAGS,
-                event="byte",
-                target=State.READ_REMAINING_LENGTH,
-                condition="is_valid_packet_type",
-                action="consume_type_and_flags",
-            ),
-            Rule(
-                source=State.READ_REMAINING_LENGTH,
-                event="byte",
-                target=State.READ_TYPE_AND_FLAGS,
-                condition="zero_length",
-                action="finish_packet",
-            ),
-            Rule(
-                source=State.READ_REMAINING_LENGTH,
-                event="byte",
-                target=State.READ_REMAINING_LENGTH,
-                condition="has_more_bytes",
-                action="append_byte",
-            ),
-            Rule(
-                source=State.READ_REMAINING_LENGTH,
-                event="byte",
-                target=State.READ_PACKET,
-                action="finish_remaining_length",
-            ),
-            Rule(
-                source=State.READ_PACKET,
-                event="byte",
-                target=State.READ_PACKET,
-                condition="has_remaining_length",
-                action="append_byte",
-            ),
-            Rule(
-                source=State.READ_PACKET,
-                event="byte",
-                target=State.READ_TYPE_AND_FLAGS,
-                action="finish_packet",
-            ),
-        ]
-
-    def get_final_state(self) -> Any:
-        return State.FAILED
-
     def feed_byte(self, byte: int) -> Packet | None:
         try:
-            return self.send("byte", byte)
-        except StateMachineError as e:
-            error = MqttParseError("Unhandled event occurred", state=self._current_state, byte=byte)
-            self._transition_to(State.FAILED)
+            return self._machine.trigger("byte", byte)
+        except MachineError as e:
+            error = MqttParseError("Unhandled event occurred", state=self._machine.state, byte=byte)
+            self._machine.transition_to(State.FAILED)
             raise error from e
 
     def is_valid_packet_type(self, byte: int) -> bool:
@@ -169,7 +116,7 @@ class MqttParser(StateMachine):
         try:
             self._packet_length = decode_remaining_length(self._buffer)
         except ValueError as e:
-            raise MqttParseError("Error parsing remaining length", state=self._current_state, byte=byte) from e
+            raise MqttParseError("Error parsing remaining length", state=self._machine.state, byte=byte) from e
         finally:
             self._buffer.clear()
 
@@ -195,7 +142,7 @@ class MqttParser(StateMachine):
             case 14:
                 packet = _parse_disconnect_packet(buffer, flags=self._packet_flags)
             case _:
-                raise MqttParseError(f"Unknown packet type {self._packet_type}", state=self._current_state, byte=byte)
+                raise MqttParseError(f"Unknown packet type {self._packet_type}", state=self._machine.state, byte=byte)
 
         return packet
 
