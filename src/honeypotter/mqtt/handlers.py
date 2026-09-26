@@ -9,7 +9,7 @@ from honeypotter.transport import DataEvent, DisconnectRequestEvent
 _logger = logging.getLogger(__name__)
 
 
-class MqttSessionHandler(Handler):
+class MqttHandler(Handler):
     def __init__(self) -> None:
         super().__init__()
 

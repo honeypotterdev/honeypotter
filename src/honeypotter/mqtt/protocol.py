@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from honeypotter.mqtt.parser import MqttParseError, MqttParser
-from honeypotter.mqtt.values import (
+from honeypotter.mqtt.packets import (
     ConnAckPacket,
     ConnectPacket,
     ConnectReturnCode,
@@ -12,6 +11,7 @@ from honeypotter.mqtt.values import (
     SubscribePacket,
     Subscription,
 )
+from honeypotter.mqtt.parser import MqttParseError, MqttParser
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -34,7 +34,7 @@ class MqttConnection:
         protocol_level: int = 4,
         clean_session: bool = True,
         keep_alive: int = 60,
-        client_id: str | None = None,
+        client_id: str = "",
         will_topic: str | None = None,
         will_payload: bytes | None = None,
         will_qos: int = 0,
