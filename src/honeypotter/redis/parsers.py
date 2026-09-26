@@ -1,6 +1,7 @@
 import shlex
-from enum import Enum, IntEnum, auto
+from enum import Enum, auto
 
+from honeypotter.constants import ASTERISK, CR, DOLLAR, LF, MINUS, NINE, ONE, PLUS, ZERO
 from honeypotter.redis.values import Array, BulkString, NullBulkString, RespValue, SimpleString
 from honeypotter.statemachine import Machine, MachineError, Transition
 
@@ -20,18 +21,6 @@ class State(Enum):
     WAIT_ARRAY_HEADER_LF = auto()
     READ_INLINE_COMMAND = auto()
     FAILED = auto()
-
-
-class Token(IntEnum):
-    PLUS = ord(b"+")
-    DOLLAR = ord(b"$")
-    ASTERISK = ord(b"*")
-    CR = ord(b"\r")
-    LF = ord(b"\n")
-    ZERO = ord(b"0")
-    ONE = ord(b"1")
-    NINE = ord(b"9")
-    MINUS = ord(b"-")
 
 
 class RespParseError(Exception):
@@ -159,28 +148,28 @@ class RespParser:
             raise error from e
 
     def is_simple_string_prefix(self, byte: int) -> bool:
-        return byte == Token.PLUS
+        return byte == PLUS
 
     def is_bulk_string_prefix(self, byte: int) -> bool:
-        return byte == Token.DOLLAR
+        return byte == DOLLAR
 
     def is_array_prefix(self, byte: int) -> bool:
-        return byte == Token.ASTERISK
+        return byte == ASTERISK
 
     def is_carriage_return(self, byte: int) -> bool:
-        return byte == Token.CR
+        return byte == CR
 
     def is_line_feed(self, byte: int) -> bool:
-        return byte == Token.LF
+        return byte == LF
 
     def is_digit(self, byte: int) -> bool:
-        return Token.ZERO <= byte <= Token.NINE
+        return ZERO <= byte <= NINE
 
     def is_minus(self, byte: int) -> bool:
-        return byte == Token.MINUS
+        return byte == MINUS
 
     def is_one(self, byte: int) -> bool:
-        return byte == Token.ONE
+        return byte == ONE
 
     def has_bulk_string_bytes_remaining(self, byte: int) -> bool:
         return self._bulk_string_bytes_remaining > 0

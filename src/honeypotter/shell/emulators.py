@@ -2,13 +2,13 @@ import codecs
 import shlex
 from pathlib import Path
 
-_data_dir = Path(__file__).parent / "data"
+_data_dir = Path(__file__).parent.parent / "data"
 _busybox_banner = (_data_dir / "busybox_banner.txt").read_text(encoding="utf-8").strip()
 
 Command = list[str]
 
 
-class BusyBoxEmulator:
+class BusyboxEmulator:
     def __init__(self, version: str = "v1.38.0 (2026-05-13 02:21:49 UTC)") -> None:
         self._version = version
 

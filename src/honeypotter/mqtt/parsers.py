@@ -1,7 +1,6 @@
 from enum import Enum, auto
 
-from honeypotter.mqtt.utils import decode_remaining_length, decode_utf8_string
-from honeypotter.mqtt.values import (
+from honeypotter.mqtt.packets import (
     ConnectPacket,
     DisconnectPacket,
     Packet,
@@ -9,6 +8,7 @@ from honeypotter.mqtt.values import (
     SubscribePacket,
     Subscription,
 )
+from honeypotter.mqtt.utils import decode_remaining_length, decode_utf8_string
 from honeypotter.statemachine import Machine, MachineError, Transition
 
 

@@ -1,4 +1,4 @@
-from honeypotter.mqtt.values import ConnectPacket
+from honeypotter.mqtt.packets import ConnectPacket
 
 
 class TestConnectPacket:

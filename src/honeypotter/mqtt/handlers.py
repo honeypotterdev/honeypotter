@@ -2,14 +2,14 @@ import logging
 from typing import Any
 
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.mqtt.protocol import ConnectionEvent, MqttConnection
-from honeypotter.mqtt.values import ConnectPacket, DisconnectPacket, PublishPacket, SubscribePacket
+from honeypotter.mqtt.packets import ConnectPacket, DisconnectPacket, PublishPacket, SubscribePacket
+from honeypotter.mqtt.sans import ConnectionEvent, MqttConnection
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
 
 
-class MqttSessionHandler(Handler):
+class MqttHandler(Handler):
     def __init__(self) -> None:
         super().__init__()
 

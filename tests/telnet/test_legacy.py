@@ -1,7 +1,7 @@
 from unittest.mock import Mock, call
 
 from honeypotter.core import HandlerContext
-from honeypotter.telnet import (
+from honeypotter.telnet.legacy import (
     CommandEvent,
     OptionAction,
     OptionNegotiator,

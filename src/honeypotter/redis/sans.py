@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from honeypotter.redis.parser import RespParseError, RespParser
+from honeypotter.redis.parsers import RespParseError, RespParser
 from honeypotter.redis.values import RespValue
 
 

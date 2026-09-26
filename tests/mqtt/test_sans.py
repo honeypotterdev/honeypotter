@@ -1,7 +1,7 @@
 import pytest
 
-from honeypotter.mqtt.protocol import MqttConnection
-from honeypotter.mqtt.values import ConnectPacket, DisconnectPacket, PublishPacket, SubscribePacket, Subscription
+from honeypotter.mqtt.packets import ConnectPacket, DisconnectPacket, PublishPacket, SubscribePacket, Subscription
+from honeypotter.mqtt.sans import MqttConnection
 
 
 class TestMqttConnection:
