@@ -37,9 +37,8 @@ class MqttParser:
         self._packet_flags = 0
         self._packet_length = 0
 
-        self._machine = Machine[State](
+        self._machine = Machine(
             model=self,
-            states=[State.READ_TYPE_AND_FLAGS, State.READ_REMAINING_LENGTH, State.READ_PACKET, State.FAILED],
             initial=State.READ_TYPE_AND_FLAGS,
             final=State.FAILED,
             transitions=[

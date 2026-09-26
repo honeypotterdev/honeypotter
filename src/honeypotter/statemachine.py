@@ -132,11 +132,8 @@ class Transition[S]:
 
 
 class Machine[S]:
-    def __init__(
-        self, *, model: Any, states: list[S], initial: S, final: S | None = None, transitions: list[Transition[S]]
-    ) -> None:
+    def __init__(self, *, model: Any, initial: S, final: S | None = None, transitions: list[Transition[S]]) -> None:
         self._model = model
-        self._states = states
         self._initial = initial
         self._final = final
         self._transitions = transitions
