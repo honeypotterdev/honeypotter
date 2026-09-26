@@ -10,7 +10,7 @@ from honeypotter.mqtt.values import (
     SubscribePacket,
     Subscription,
 )
-from honeypotter.statemachine import Rule, StateMachine, StateMachineError
+from honeypotter.statemachine import Machine, Rule, StateMachine, StateMachineError, Transition
 
 
 class State(Enum):
@@ -39,6 +39,55 @@ class MqttParser(StateMachine):
         self._packet_type = 0
         self._packet_flags = 0
         self._packet_length = 0
+
+        self._machine = Machine[State](
+            model=self,
+            states=[State.READ_TYPE_AND_FLAGS, State.READ_REMAINING_LENGTH, State.READ_PACKET, State.FAILED],
+            initial=State.READ_TYPE_AND_FLAGS,
+            final=State.FAILED,
+            transitions=[
+                Transition(
+                    "byte",
+                    State.READ_TYPE_AND_FLAGS,
+                    State.READ_REMAINING_LENGTH,
+                    condition="is_valid_packet_type",
+                    action="consume_type_and_flags",
+                ),
+                Transition(
+                    "byte",
+                    State.READ_REMAINING_LENGTH,
+                    State.READ_TYPE_AND_FLAGS,
+                    condition="zero_length",
+                    action="finish_packet",
+                ),
+                Transition(
+                    "byte",
+                    State.READ_REMAINING_LENGTH,
+                    State.READ_REMAINING_LENGTH,
+                    condition="has_more_bytes",
+                    action="append_byte",
+                ),
+                Transition(
+                    "byte",
+                    State.READ_REMAINING_LENGTH,
+                    State.READ_PACKET,
+                    action="finish_remaining_length",
+                ),
+                Transition(
+                    "byte",
+                    State.READ_PACKET,
+                    State.READ_PACKET,
+                    condition="has_remaining_length",
+                    action="append_byte",
+                ),
+                Transition(
+                    "byte",
+                    State.READ_PACKET,
+                    State.READ_TYPE_AND_FLAGS,
+                    action="finish_packet",
+                ),
+            ],
+        )
 
     def get_initial_state(self) -> Any:
         return State.READ_TYPE_AND_FLAGS
@@ -193,7 +242,7 @@ class _MqttReader:
 
 def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> ConnectPacket:
     if flags != 0:
-        raise ValueError("CONNECT fixed-header flags must be zero")
+        raise MqttParseError("CONNECT fixed-header flags must be zero")
 
     reader = _MqttReader(packet)
     protocol_name = reader.read_utf8_string()
@@ -201,7 +250,7 @@ def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Conne
     connect_flags = reader.read_uint8()
 
     if connect_flags & 1:
-        raise ValueError("CONNECT reserved flag must be zero")
+        raise MqttParseError("CONNECT reserved flag must be zero")
 
     clean_session = bool(connect_flags & 2)
     will_flag = bool(connect_flags & 4)

@@ -116,3 +116,72 @@ class StateMachine(ABC):
             return state.name
 
         return str(state)
+
+
+class MachineError(Exception):
+    pass
+
+
+@dataclass(frozen=True)
+class Transition[S]:
+    event: str
+    source: S
+    target: S
+    condition: str | None = None
+    action: str | None = None
+
+
+class Machine[S]:
+    def __init__(
+        self, *, model: Any, states: list[S], initial: S, final: S | None = None, transitions: list[Transition[S]]
+    ) -> None:
+        self._model = model
+        self._states = states
+        self._initial = initial
+        self._final = final
+        self._transitions = transitions
+
+        self._state = initial
+        self._transition_table = self._create_transition_table(transitions)
+        self._in_final_state = False
+
+    @property
+    def state(self) -> S:
+        return self._state
+
+    def trigger(self, event: str, *args: Any, **kwargs: Any) -> Any:
+        if self._in_final_state:
+            raise MachineError(f"Can't trigger event {event!r} from final state {self._state!r}")
+
+        candidates = self._transition_table[(event, self._state)]
+
+        for candidate in candidates:
+            if candidate.condition is not None:
+                condition_callback = getattr(self._model, candidate.condition)
+
+                if not condition_callback(*args, **kwargs):
+                    continue
+
+            self.transition_to(candidate.target)
+
+            if candidate.action is None:
+                return None
+
+            action_callback = getattr(self._model, candidate.action)
+            return action_callback(*args, **kwargs)
+
+        raise MachineError(f"Can't trigger event {event!r} from state {self._state!r}")
+
+    def transition_to(self, state: S) -> None:
+        self._state = state
+
+        if self._final is not None and state == self._final:
+            self._in_final_state = True
+
+    def _create_transition_table(self, transitions: list[Transition[S]]) -> dict[tuple[str, S], list[Transition[S]]]:
+        table = defaultdict(list)
+
+        for transition in transitions:
+            table[(transition.event, transition.source)].append(transition)
+
+        return table
