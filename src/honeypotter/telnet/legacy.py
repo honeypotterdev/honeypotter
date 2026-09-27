@@ -81,6 +81,7 @@ class TelnetOption:
         self._machine = Machine(
             model=self,
             initial=OptionState.NO,
+            raise_on_invalid_transition=False,
             transitions=[
                 # NO
                 Transition(
@@ -180,7 +181,6 @@ class TelnetOption:
                     source=OptionState.WANTYES_OPPOSITE, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO
                 ),
             ],
-            raise_on_invalid_transition=False,
         )
 
     @property
