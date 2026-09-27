@@ -43,7 +43,13 @@ class TelnetConnection:
                     action="_store_verb",
                     before="_flush_app_buffer",
                 ),
-                Transition("byte", State.READ_COMMAND, State.READ_SUBNEGOTIATION, condition="_is_sb"),
+                Transition(
+                    "byte",
+                    State.READ_COMMAND,
+                    State.READ_SUBNEGOTIATION,
+                    condition="_is_sb",
+                    before="_flush_app_buffer",
+                ),
                 Transition("byte", State.READ_NEGOTIATION, State.READ_APPLICATION_DATA, action="_finalize_negotiation"),
                 Transition("byte", State.READ_SUBNEGOTIATION, State.READ_SUBNEGOTIATION_COMMAND, condition="_is_iac"),
                 Transition(
