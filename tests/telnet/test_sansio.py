@@ -79,6 +79,11 @@ class TestTelnetConnection:
 
         assert connection.receive_data(message.to_bytes()) == [message]
 
+    def test_receive_data_subnegotiation_double_iac(self, connection: TelnetConnection) -> None:
+        message = Subnegotiation(option=NegotiationOption.NAWS, data=b"\xff")
+
+        assert connection.receive_data(message.to_bytes()) == [message]
+
     def test_receive_data_subnegotiation_fragmented(self, connection: TelnetConnection) -> None:
         message = Subnegotiation(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
         data = message.to_bytes()

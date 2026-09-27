@@ -79,6 +79,13 @@ class TelnetConnection:
                 Transition(
                     "byte",
                     State.READ_SUBNEGOTIATION_IAC,
+                    State.READ_SUBNEGOTIATION_DATA,
+                    condition="_is_iac",
+                    action="_subnegotiation_buffer_append",
+                ),
+                Transition(
+                    "byte",
+                    State.READ_SUBNEGOTIATION_IAC,
                     State.READ_APPLICATION_DATA,
                     condition="_is_se",
                     action="_finalize_subnegotiation",
