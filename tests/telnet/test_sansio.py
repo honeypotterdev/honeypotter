@@ -50,3 +50,11 @@ class TestTelnetConnection:
 
         assert connection.receive_data(data[:3]) == []
         assert connection.receive_data(data[3:]) == [message]
+
+    def test_receive_data_correct_order(self, connection: TelnetConnection) -> None:
+        app_data_1 = ApplicationData(data=b"foo")
+        negotiation = Negotiation(verb=Verb.WILL, option=Option.ECHO)
+        app_data_2 = ApplicationData(data=b"bar")
+        data = app_data_1.to_bytes() + negotiation.to_bytes() + app_data_2.to_bytes()
+
+        assert connection.receive_data(data) == [app_data_1, negotiation, app_data_2]

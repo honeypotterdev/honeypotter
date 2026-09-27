@@ -1,4 +1,5 @@
 from enum import Enum, auto
+from typing import Any
 
 from honeypotter.statemachine import Machine, Transition
 from honeypotter.telnet.values import ApplicationData, Negotiation, Option, Subnegotiation, Verb
@@ -16,6 +17,7 @@ class TelnetConnection:
     def __init__(self) -> None:
         self._app_buffer = bytearray()
         self._subnegotiation_buffer = bytearray()
+        self._event_buffer = []
         self._verb = 0
 
         self._machine = Machine(
@@ -34,7 +36,12 @@ class TelnetConnection:
                     action="_app_buffer_append",
                 ),
                 Transition(
-                    "byte", State.READ_COMMAND, State.READ_NEGOTIATION, condition="_is_verb", action="_store_verb"
+                    "byte",
+                    State.READ_COMMAND,
+                    State.READ_NEGOTIATION,
+                    condition="_is_verb",
+                    action="_store_verb",
+                    before="_flush_app_buffer",
                 ),
                 Transition("byte", State.READ_COMMAND, State.READ_SUBNEGOTIATION, condition="_is_sb"),
                 Transition("byte", State.READ_NEGOTIATION, State.READ_APPLICATION_DATA, action="_finalize_negotiation"),
@@ -62,16 +69,16 @@ class TelnetConnection:
         return Subnegotiation(data=data).to_bytes()
 
     def receive_data(self, data: bytes):
-        events = []
-
         for byte in data:
-            events.append(self._machine.trigger("byte", byte))
+            event = self._machine.trigger("byte", byte)
 
-        events = [event for event in events if event is not None]
+            if event is not None:
+                self._event_buffer.append(event)
 
-        if self._app_buffer:
-            events.append(ApplicationData(data=bytes(self._app_buffer)))
-            self._app_buffer.clear()
+        self._flush_app_buffer()
+
+        events = self._event_buffer
+        self._event_buffer = []
 
         return events
 
@@ -86,6 +93,11 @@ class TelnetConnection:
 
     def _is_verb(self, byte: int) -> bool:
         return Verb.WILL <= byte <= Verb.DONT
+
+    def _flush_app_buffer(self, *_args: Any, **_kwargs: Any) -> None:
+        if self._app_buffer:
+            self._event_buffer.append(ApplicationData(data=bytes(self._app_buffer)))
+            self._app_buffer.clear()
 
     def _app_buffer_append(self, byte: int) -> None:
         self._app_buffer.append(byte)

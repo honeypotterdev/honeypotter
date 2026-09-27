@@ -15,6 +15,8 @@ class Transition[S, E]:
     target: S
     condition: str | None = None
     action: str | None = None
+    before: str | None = None
+    after: str | None = None
 
 
 class Machine[S, E]:
@@ -54,7 +56,15 @@ class Machine[S, E]:
                 if not condition_callback(*args, **kwargs):
                     continue
 
+            if candidate.before is not None:
+                before_callback = getattr(self._model, candidate.before)
+                before_callback(*args, **kwargs)
+
             self.transition_to(candidate.target)
+
+            if candidate.after is not None:
+                after_callback = getattr(self._model, candidate.after)
+                after_callback(*args, **kwargs)
 
             if candidate.action is None:
                 return None
