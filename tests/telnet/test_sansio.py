@@ -15,6 +15,10 @@ class TestTelnetConnection:
     def test_send_negotiation(self, connection: TelnetConnection) -> None:
         assert connection.send_negotiation(Verb.WILL, Option.ECHO) == b"\xff\xfb\x01"
 
+    def test_send_subnegotiation(self, connection: TelnetConnection) -> None:
+        data = bytes([31, 0, 100, 0, 50])  # NAWS, width: 100, height: 50
+        assert connection.send_subnegotiation(data) == b"\xff\xfa\x1f\x00\x64\x00\x32\xff\xf0"
+
     def test_receive_data_application_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo") == [ApplicationData(data=b"foo")]
 

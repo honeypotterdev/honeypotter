@@ -40,3 +40,11 @@ class Negotiation:
 
     def to_bytes(self) -> bytes:
         return b"\xff" + self.verb.to_bytes() + self.option.to_bytes()
+
+
+@dataclass(frozen=True, kw_only=True)
+class Subnegotiation:
+    data: bytes
+
+    def to_bytes(self) -> bytes:
+        return b"\xff\xfa" + self.data + b"\xff\xf0"

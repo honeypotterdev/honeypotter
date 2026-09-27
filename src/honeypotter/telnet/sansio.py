@@ -1,7 +1,7 @@
 from enum import Enum, auto
 
 from honeypotter.statemachine import Machine, Transition
-from honeypotter.telnet.values import ApplicationData, Negotiation, Option, Verb
+from honeypotter.telnet.values import ApplicationData, Negotiation, Option, Subnegotiation, Verb
 
 
 class State(Enum):
@@ -40,6 +40,9 @@ class TelnetConnection:
 
     def send_negotiation(self, verb: Verb, option: Option) -> bytes:
         return Negotiation(verb=verb, option=option).to_bytes()
+
+    def send_subnegotiation(self, data: bytes) -> bytes:
+        return Subnegotiation(data=data).to_bytes()
 
     def receive_data(self, data: bytes):
         events = []
