@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
 
-from honeypotter.statemachine import Machine, Transition
+from honeypotter.statemachine import Machine, MachineError, Transition
 from honeypotter.telnet.values import (
     ApplicationData,
     Command,
@@ -40,6 +40,7 @@ class TelnetConnection:
         self._event_buffer = []
         self._negotiation_verb = 0
         self._subnegotiation_option = 0
+        self._receive_failed = False
 
         self._machine = Machine(
             model=self,
@@ -116,8 +117,17 @@ class TelnetConnection:
         return Subnegotiation(option=NegotiationOption(option), data=data).to_bytes()
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
+        if self._receive_failed:
+            return []
+
         for byte in data:
-            event = self._machine.trigger("byte", byte)
+            try:
+                event = self._machine.trigger("byte", byte)
+            except MachineError:
+                self._receive_failed = True
+                events = self._event_buffer + [ProtocolErrorOccurred()]
+                self._event_buffer = []
+                return events
 
             if event is not None:
                 self._event_buffer.append(event)
