@@ -8,8 +8,8 @@ from honeypotter.telnet.values import (
     Command,
     CommandCode,
     Negotiation,
+    NegotiationOption,
     NegotiationVerb,
-    Option,
     Subnegotiation,
 )
 
@@ -32,12 +32,13 @@ class TestTelnetConnection:
         assert connection.send_command(CommandCode.AYT) == b"\xff\xf6"
 
     def test_send_negotiation(self, connection: TelnetConnection) -> None:
-        assert connection.send_negotiation(NegotiationVerb.WILL, Option.ECHO) == b"\xff\xfb\x01"
+        assert connection.send_negotiation(NegotiationVerb.WILL, NegotiationOption.ECHO) == b"\xff\xfb\x01"
 
     def test_send_subnegotiation(self, connection: TelnetConnection) -> None:
-        data = b"\x1f\x00\x64\x00\x32"  # NAWS, width: 100, height: 50
-
-        assert connection.send_subnegotiation(data) == b"\xff\xfa\x1f\x00\x64\x00\x32\xff\xf0"
+        assert (
+            connection.send_subnegotiation(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
+            == b"\xff\xfa\x1f\x00\x64\x00\x32\xff\xf0"
+        )
 
     def test_receive_data_application_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo") == [ApplicationData(data=b"foo")]
@@ -49,8 +50,8 @@ class TestTelnetConnection:
         "second",
         [
             Command(code=CommandCode.AYT),
-            Negotiation(verb=NegotiationVerb.WILL, option=Option.ECHO),
-            Subnegotiation(data=b"bar"),
+            Negotiation(verb=NegotiationVerb.WILL, option=NegotiationOption.ECHO),
+            Subnegotiation(option=NegotiationOption.NAWS, data=b"bar"),
         ],
     )
     def test_receive_data_application_data_flush(self, connection: TelnetConnection, second: Command) -> None:
@@ -66,17 +67,17 @@ class TestTelnetConnection:
         assert connection.receive_data(message.to_bytes()) == [message]
 
     def test_receive_data_negotiation(self, connection: TelnetConnection) -> None:
-        message = Negotiation(verb=NegotiationVerb.DO, option=Option.ECHO)
+        message = Negotiation(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO)
 
         assert connection.receive_data(message.to_bytes()) == [message]
 
     def test_receive_data_subnegotiation(self, connection: TelnetConnection) -> None:
-        message = Subnegotiation(data=b"\x1f\x00\x64\x00\x32")
+        message = Subnegotiation(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
 
         assert connection.receive_data(message.to_bytes()) == [message]
 
     def test_receive_data_subnegotiation_fragmented(self, connection: TelnetConnection) -> None:
-        message = Subnegotiation(data=b"\x1f\x00\x64\x00\x32")
+        message = Subnegotiation(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
         data = message.to_bytes()
 
         assert connection.receive_data(data[:3]) == []

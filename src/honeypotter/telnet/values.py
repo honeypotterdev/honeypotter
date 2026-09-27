@@ -24,9 +24,10 @@ class CommandCode(DynamicIntEnum):
     EL = 248  # Erase Line
 
 
-class Option(DynamicIntEnum):
+class NegotiationOption(DynamicIntEnum):
     ECHO = 1
     SGA = 3
+    NAWS = 31
 
 
 class NegotiationVerb(IntEnum):
@@ -63,7 +64,7 @@ class Command:
 @dataclass(frozen=True, kw_only=True)
 class Negotiation:
     verb: NegotiationVerb
-    option: Option
+    option: NegotiationOption
 
     def to_bytes(self) -> bytes:
         return b"\xff" + self.verb.to_bytes() + self.option.to_bytes()
@@ -71,7 +72,8 @@ class Negotiation:
 
 @dataclass(frozen=True, kw_only=True)
 class Subnegotiation:
+    option: NegotiationOption
     data: bytes
 
     def to_bytes(self) -> bytes:
-        return b"\xff\xfa" + self.data + b"\xff\xf0"
+        return b"\xff\xfa" + self.option.to_bytes() + self.data + b"\xff\xf0"
