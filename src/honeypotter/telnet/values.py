@@ -11,6 +11,7 @@ class Verb(IntEnum):
 
 class Option(IntEnum):
     ECHO = 1
+    SGA = 3
 
     @classmethod
     def _missing_(cls, value: object) -> int | None:
@@ -30,7 +31,7 @@ class ApplicationData:
     data: bytes
 
     def to_bytes(self) -> bytes:
-        return self.data
+        return self.data.replace(b"\xff\xff", b"\xff")
 
 
 @dataclass(frozen=True, kw_only=True)

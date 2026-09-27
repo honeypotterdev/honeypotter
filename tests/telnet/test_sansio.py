@@ -1,4 +1,6 @@
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
 from honeypotter.telnet.sansio import TelnetConnection
 from honeypotter.telnet.values import ApplicationData, Negotiation, Option, Subnegotiation, Verb
@@ -9,8 +11,14 @@ class TestTelnetConnection:
     def connection(self) -> TelnetConnection:
         return TelnetConnection()
 
-    def test_send_application_data(self, connection: TelnetConnection) -> None:
-        assert connection.send_application_data(b"foo") == b"foo"
+    @given(data=st.binary())
+    def test_send_application_data(self, data: bytes) -> None:
+        connection = TelnetConnection()
+
+        assert connection.send_application_data(data) == data
+
+    def test_send_application_data_double_iac(self, connection: TelnetConnection) -> None:
+        assert connection.send_application_data(b"\xff\xff") == b"\xff"
 
     def test_send_negotiation(self, connection: TelnetConnection) -> None:
         assert connection.send_negotiation(Verb.WILL, Option.ECHO) == b"\xff\xfb\x01"
