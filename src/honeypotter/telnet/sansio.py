@@ -8,6 +8,8 @@ class State(Enum):
     READ_APPLICATION_DATA = auto()
     READ_COMMAND = auto()
     READ_NEGOTIATION = auto()
+    READ_SUBNEGOTIATION = auto()
+    READ_SUBNEGOTIATION_COMMAND = auto()
 
 
 class TelnetConnection:
@@ -31,7 +33,17 @@ class TelnetConnection:
                 Transition(
                     "byte", State.READ_COMMAND, State.READ_NEGOTIATION, condition="_is_verb", action="_store_verb"
                 ),
+                Transition("byte", State.READ_COMMAND, State.READ_SUBNEGOTIATION, condition="_is_sb"),
                 Transition("byte", State.READ_NEGOTIATION, State.READ_APPLICATION_DATA, action="_finalize_negotiation"),
+                Transition("byte", State.READ_SUBNEGOTIATION, State.READ_SUBNEGOTIATION_COMMAND, condition="_is_iac"),
+                Transition("byte", State.READ_SUBNEGOTIATION, State.READ_SUBNEGOTIATION, action="_buffer_append"),
+                Transition(
+                    "byte",
+                    State.READ_SUBNEGOTIATION_COMMAND,
+                    State.READ_APPLICATION_DATA,
+                    condition="_is_se",
+                    action="_finalize_subnegotiation",
+                ),
             ],
         )
 
@@ -61,6 +73,12 @@ class TelnetConnection:
     def _is_iac(self, byte: int) -> bool:
         return byte == 255
 
+    def _is_sb(self, byte: int) -> bool:
+        return byte == 250
+
+    def _is_se(self, byte: int) -> bool:
+        return byte == 240
+
     def _is_verb(self, byte: int) -> bool:
         return Verb.WILL <= byte <= Verb.DONT
 
@@ -75,3 +93,9 @@ class TelnetConnection:
         self._verb = 0
 
         return negotiation
+
+    def _finalize_subnegotiation(self, byte: int) -> Subnegotiation:
+        subnegotiation = Subnegotiation(data=bytes(self._buffer))
+        self._buffer.clear()
+
+        return subnegotiation
