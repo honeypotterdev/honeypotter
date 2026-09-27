@@ -14,7 +14,8 @@ class State(Enum):
 
 class TelnetConnection:
     def __init__(self) -> None:
-        self._buffer = bytearray()
+        self._app_buffer = bytearray()
+        self._subnegotiation_buffer = bytearray()
         self._verb = 0
 
         self._machine = Machine(
@@ -22,13 +23,15 @@ class TelnetConnection:
             initial=State.READ_APPLICATION_DATA,
             transitions=[
                 Transition("byte", State.READ_APPLICATION_DATA, State.READ_COMMAND, condition="_is_iac"),
-                Transition("byte", State.READ_APPLICATION_DATA, State.READ_APPLICATION_DATA, action="_buffer_append"),
+                Transition(
+                    "byte", State.READ_APPLICATION_DATA, State.READ_APPLICATION_DATA, action="_app_buffer_append"
+                ),
                 Transition(
                     "byte",
                     State.READ_COMMAND,
                     State.READ_APPLICATION_DATA,
                     condition="_is_iac",
-                    action="_buffer_append",
+                    action="_app_buffer_append",
                 ),
                 Transition(
                     "byte", State.READ_COMMAND, State.READ_NEGOTIATION, condition="_is_verb", action="_store_verb"
@@ -36,7 +39,9 @@ class TelnetConnection:
                 Transition("byte", State.READ_COMMAND, State.READ_SUBNEGOTIATION, condition="_is_sb"),
                 Transition("byte", State.READ_NEGOTIATION, State.READ_APPLICATION_DATA, action="_finalize_negotiation"),
                 Transition("byte", State.READ_SUBNEGOTIATION, State.READ_SUBNEGOTIATION_COMMAND, condition="_is_iac"),
-                Transition("byte", State.READ_SUBNEGOTIATION, State.READ_SUBNEGOTIATION, action="_buffer_append"),
+                Transition(
+                    "byte", State.READ_SUBNEGOTIATION, State.READ_SUBNEGOTIATION, action="_subnegotiation_buffer_append"
+                ),
                 Transition(
                     "byte",
                     State.READ_SUBNEGOTIATION_COMMAND,
@@ -64,9 +69,9 @@ class TelnetConnection:
 
         events = [event for event in events if event is not None]
 
-        if self._buffer:
-            events.append(ApplicationData(data=bytes(self._buffer)))
-            self._buffer.clear()
+        if self._app_buffer:
+            events.append(ApplicationData(data=bytes(self._app_buffer)))
+            self._app_buffer.clear()
 
         return events
 
@@ -82,8 +87,11 @@ class TelnetConnection:
     def _is_verb(self, byte: int) -> bool:
         return Verb.WILL <= byte <= Verb.DONT
 
-    def _buffer_append(self, byte: int) -> None:
-        self._buffer.append(byte)
+    def _app_buffer_append(self, byte: int) -> None:
+        self._app_buffer.append(byte)
+
+    def _subnegotiation_buffer_append(self, byte: int) -> None:
+        self._subnegotiation_buffer.append(byte)
 
     def _store_verb(self, byte: int) -> None:
         self._verb = byte
@@ -95,7 +103,7 @@ class TelnetConnection:
         return negotiation
 
     def _finalize_subnegotiation(self, byte: int) -> Subnegotiation:
-        subnegotiation = Subnegotiation(data=bytes(self._buffer))
-        self._buffer.clear()
+        subnegotiation = Subnegotiation(data=bytes(self._subnegotiation_buffer))
+        self._subnegotiation_buffer.clear()
 
         return subnegotiation

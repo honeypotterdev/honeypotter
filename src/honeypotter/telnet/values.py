@@ -31,7 +31,15 @@ class ApplicationData:
     data: bytes
 
     def to_bytes(self) -> bytes:
-        return self.data.replace(b"\xff\xff", b"\xff")
+        encoded = bytearray()
+
+        for byte in self.data:
+            if byte == 255:
+                encoded.extend(b"\xff\xff")
+            else:
+                encoded.append(byte)
+
+        return bytes(encoded)
 
 
 @dataclass(frozen=True, kw_only=True)
