@@ -3,7 +3,15 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from honeypotter.telnet.sansio import TelnetConnection
-from honeypotter.telnet.values import ApplicationData, Negotiation, Option, Subnegotiation, Verb
+from honeypotter.telnet.values import (
+    ApplicationData,
+    Command,
+    CommandCode,
+    Negotiation,
+    NegotiationVerb,
+    Option,
+    Subnegotiation,
+)
 
 
 class TestTelnetConnection:
@@ -20,8 +28,11 @@ class TestTelnetConnection:
     def test_send_application_data_double_iac(self, connection: TelnetConnection) -> None:
         assert connection.send_application_data(b"\xff") == b"\xff\xff"
 
+    def test_send_command(self, connection: TelnetConnection) -> None:
+        assert connection.send_command(CommandCode.AYT) == b"\xff\xf6"
+
     def test_send_negotiation(self, connection: TelnetConnection) -> None:
-        assert connection.send_negotiation(Verb.WILL, Option.ECHO) == b"\xff\xfb\x01"
+        assert connection.send_negotiation(NegotiationVerb.WILL, Option.ECHO) == b"\xff\xfb\x01"
 
     def test_send_subnegotiation(self, connection: TelnetConnection) -> None:
         data = b"\x1f\x00\x64\x00\x32"  # NAWS, width: 100, height: 50
@@ -31,11 +42,31 @@ class TestTelnetConnection:
     def test_receive_data_application_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo") == [ApplicationData(data=b"foo")]
 
-    def test_receive_data_double_iac(self, connection: TelnetConnection) -> None:
+    def test_receive_data_application_data_double_iac(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"\xff\xff") == [ApplicationData(data=b"\xff")]
 
+    @pytest.mark.parametrize(
+        "second",
+        [
+            Command(code=CommandCode.AYT),
+            Negotiation(verb=NegotiationVerb.WILL, option=Option.ECHO),
+            Subnegotiation(data=b"bar"),
+        ],
+    )
+    def test_receive_data_application_data_flush(self, connection: TelnetConnection, second: Command) -> None:
+        first = ApplicationData(data=b"foo")
+        third = ApplicationData(data=b"bar")
+        data = first.to_bytes() + second.to_bytes() + third.to_bytes()
+
+        assert connection.receive_data(data) == [first, second, third]
+
+    def test_receive_data_command(self, connection: TelnetConnection) -> None:
+        message = Command(code=CommandCode.AYT)
+
+        assert connection.receive_data(message.to_bytes()) == [message]
+
     def test_receive_data_negotiation(self, connection: TelnetConnection) -> None:
-        message = Negotiation(verb=Verb.DO, option=Option.ECHO)
+        message = Negotiation(verb=NegotiationVerb.DO, option=Option.ECHO)
 
         assert connection.receive_data(message.to_bytes()) == [message]
 
@@ -50,19 +81,3 @@ class TestTelnetConnection:
 
         assert connection.receive_data(data[:3]) == []
         assert connection.receive_data(data[3:]) == [message]
-
-    def test_receive_data_correct_order_1(self, connection: TelnetConnection) -> None:
-        app_data_1 = ApplicationData(data=b"foo")
-        negotiation = Negotiation(verb=Verb.WILL, option=Option.ECHO)
-        app_data_2 = ApplicationData(data=b"bar")
-        data = app_data_1.to_bytes() + negotiation.to_bytes() + app_data_2.to_bytes()
-
-        assert connection.receive_data(data) == [app_data_1, negotiation, app_data_2]
-
-    def test_receive_data_correct_order_2(self, connection: TelnetConnection) -> None:
-        app_data_1 = ApplicationData(data=b"foo")
-        subnegotiation = Subnegotiation(data=b"bar")
-        app_data_2 = ApplicationData(data=b"baz")
-        data = app_data_1.to_bytes() + subnegotiation.to_bytes() + app_data_2.to_bytes()
-
-        assert connection.receive_data(data) == [app_data_1, subnegotiation, app_data_2]

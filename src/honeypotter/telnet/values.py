@@ -2,17 +2,7 @@ from dataclasses import dataclass
 from enum import IntEnum
 
 
-class Verb(IntEnum):
-    WILL = 251
-    WONT = 252
-    DO = 253
-    DONT = 254
-
-
-class Option(IntEnum):
-    ECHO = 1
-    SGA = 3
-
+class DynamicIntEnum(IntEnum):
     @classmethod
     def _missing_(cls, value: object) -> int | None:
         if not isinstance(value, int) or not 0 <= value <= 255:
@@ -24,6 +14,26 @@ class Option(IntEnum):
         cls._value2member_map_[value] = pseudo_member
 
         return pseudo_member
+
+
+class CommandCode(DynamicIntEnum):
+    BRK = 243  # Break
+    AO = 245  # Abort Output
+    AYT = 246  # Are You There
+    EC = 247  # Escape Character
+    EL = 248  # Erase Line
+
+
+class Option(DynamicIntEnum):
+    ECHO = 1
+    SGA = 3
+
+
+class NegotiationVerb(IntEnum):
+    WILL = 251
+    WONT = 252
+    DO = 253
+    DONT = 254
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -43,8 +53,16 @@ class ApplicationData:
 
 
 @dataclass(frozen=True, kw_only=True)
+class Command:
+    code: CommandCode
+
+    def to_bytes(self) -> bytes:
+        return b"\xff" + self.code.to_bytes()
+
+
+@dataclass(frozen=True, kw_only=True)
 class Negotiation:
-    verb: Verb
+    verb: NegotiationVerb
     option: Option
 
     def to_bytes(self) -> bytes:
