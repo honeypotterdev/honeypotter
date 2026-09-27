@@ -77,3 +77,6 @@ class Subnegotiation:
 
     def to_bytes(self) -> bytes:
         return b"\xff\xfa" + self.option.to_bytes() + self.data.replace(b"\xff", b"\xff\xff") + b"\xff\xf0"
+
+
+type Value = ApplicationData | Command | Negotiation | Subnegotiation

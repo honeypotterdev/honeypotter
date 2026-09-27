@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
 
@@ -10,6 +11,7 @@ from honeypotter.telnet.values import (
     NegotiationOption,
     NegotiationVerb,
     Subnegotiation,
+    Value,
 )
 
 
@@ -21,6 +23,14 @@ class State(Enum):
     READ_SUBNEGOTIATION_OPTION = auto()
     READ_SUBNEGOTIATION_DATA = auto()
     READ_SUBNEGOTIATION_IAC = auto()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProtocolErrorOccurred:
+    pass
+
+
+type ConnectionEvent = Value | ProtocolErrorOccurred
 
 
 class TelnetConnection:
@@ -105,7 +115,7 @@ class TelnetConnection:
     def send_subnegotiation(self, option: int, data: bytes) -> bytes:
         return Subnegotiation(option=NegotiationOption(option), data=data).to_bytes()
 
-    def receive_data(self, data: bytes):
+    def receive_data(self, data: bytes) -> list[ConnectionEvent]:
         for byte in data:
             event = self._machine.trigger("byte", byte)
 
