@@ -40,6 +40,9 @@ class TestTelnetConnection:
             == b"\xff\xfa\x1f\x00\x64\x00\x32\xff\xf0"
         )
 
+    def test_send_subnegotiation_double_iac(self, connection: TelnetConnection) -> None:
+        assert connection.send_subnegotiation(option=1, data=b"\xff") == b"\xff\xfa\x01\xff\xff\xff\xf0"
+
     def test_receive_data_application_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo") == [ApplicationData(data=b"foo")]
 

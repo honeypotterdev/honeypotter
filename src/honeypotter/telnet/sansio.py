@@ -95,8 +95,8 @@ class TelnetConnection:
     def send_negotiation(self, verb: NegotiationVerb, option: NegotiationOption) -> bytes:
         return Negotiation(verb=verb, option=option).to_bytes()
 
-    def send_subnegotiation(self, option: NegotiationOption, data: bytes) -> bytes:
-        return Subnegotiation(option=option, data=data).to_bytes()
+    def send_subnegotiation(self, option: int, data: bytes) -> bytes:
+        return Subnegotiation(option=NegotiationOption(option), data=data).to_bytes()
 
     def receive_data(self, data: bytes):
         for byte in data:
