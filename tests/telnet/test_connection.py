@@ -203,9 +203,9 @@ class TestTelnetConnection:
         ]
 
     def test_request_option(self, connection: TelnetConnection) -> None:
-        connection.request_option(NegotiationOption.ECHO, side=Side.LOCAL, enabled=True)
-        connection.request_option(NegotiationOption.SGA, side=Side.LOCAL, enabled=True)
-        connection.request_option(NegotiationOption.SGA, side=Side.REMOTE, enabled=True)
+        connection.request_option(NegotiationOption.ECHO, side=Side.LOCAL, enable=True)
+        connection.request_option(NegotiationOption.SGA, side=Side.LOCAL, enable=True)
+        connection.request_option(NegotiationOption.SGA, side=Side.REMOTE, enable=True)
 
         assert connection.data_to_send() == b"\xff\xfb\x01\xff\xfb\x03\xff\xfd\x03"
         assert connection.is_option_enabled(NegotiationOption.ECHO, side=Side.LOCAL) is False

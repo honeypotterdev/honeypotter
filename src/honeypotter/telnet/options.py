@@ -107,14 +107,15 @@ class OptionNegotiator:
     def is_enabled(self, option: int) -> bool:
         return self._options[option].state is QState.YES
 
-    def request(self, option: int, enabled: bool) -> NegotiationAction | None:
-        option_input = QInput.REQUEST_ENABLE if enabled else QInput.REQUEST_DISABLE
+    def request_enable(self, option: int) -> NegotiationAction | None:
+        return self._options[option].handle_input(QInput.REQUEST_ENABLE)
 
-        return self._options[option].handle_input(option_input)
+    def request_disable(self, option: int) -> NegotiationAction | None:
+        return self._options[option].handle_input(QInput.REQUEST_DISABLE)
 
-    def receive_enable(self, option: int, *, allow: bool) -> NegotiationAction | None:
+    def receive_enable(self, option: int, *, allowed: bool) -> NegotiationAction | None:
         return self._options[option].handle_input(
-            QInput.RECEIVE_ENABLE_ALLOWED if allow else QInput.RECEIVE_ENABLE_DISALLOWED
+            QInput.RECEIVE_ENABLE_ALLOWED if allowed else QInput.RECEIVE_ENABLE_DISALLOWED
         )
 
     def receive_disable(self, option: int) -> NegotiationAction | None:

@@ -107,9 +107,13 @@ class TelnetConnection:
 
         return events
 
-    def request_option(self, option: NegotiationOption, *, side: Side, enabled: bool) -> None:
+    def request_option(self, option: NegotiationOption, *, side: Side, enable: bool) -> None:
         options = self._local_options if side == Side.LOCAL else self._remote_options
-        action = options.request(option, enabled)
+
+        if enable:
+            action = options.request_enable(option)
+        else:
+            action = options.request_disable(option)
 
         if action is None:
             return
@@ -121,7 +125,7 @@ class TelnetConnection:
             (Side.REMOTE, False): NegotiationVerb.DONT,
         }
 
-        verb = mapping[(side, enabled)]
+        verb = mapping[(side, enable)]
 
         self.send_negotiation(verb=verb, option=option)
 
