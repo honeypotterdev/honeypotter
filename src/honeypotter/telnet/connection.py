@@ -179,7 +179,11 @@ class TelnetConnection:
             self._app_buffer.append(byte)
             return
 
-        self._pending_cr = False
+        self._pending_cr = byte == CR
+
+        if byte == CR:
+            self._app_buffer.append(CR)
+            return
 
         if byte == LF:
             self._app_buffer.append(LF)

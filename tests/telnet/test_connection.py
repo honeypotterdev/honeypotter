@@ -103,6 +103,7 @@ class TestTelnetConnection:
             (b"hello\r\x00world", b"hello\rworld"),
             (b"\r\x00\r\n", b"\r\n"),
             (b"\r\r\n", b"\r\n"),
+            (b"\r\r\r\n", b"\r\r\n"),
         ],
     )
     def test_receive_data_application_data_nvt_decode(
