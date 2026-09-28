@@ -31,7 +31,7 @@ class TestTelnetConnection:
 
         assert connection.data_to_send() == data
 
-    def test_send_application_data_iac_escape(self, connection: TelnetConnection) -> None:
+    def test_send_application_data_iac_escaped(self, connection: TelnetConnection) -> None:
         connection.send_application_data(b"\xff")
 
         assert connection.data_to_send() == b"\xff\xff"
@@ -80,8 +80,16 @@ class TestTelnetConnection:
     def test_receive_data_application_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo") == [ApplicationDataReceived(data=b"foo")]
 
-    def test_receive_data_application_data_iac_escape(self, connection: TelnetConnection) -> None:
+    def test_receive_data_application_data_iac_escaped(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"\xff\xff") == [ApplicationDataReceived(data=b"\xff")]
+
+    def test_receive_data_application_data_iac_buffered(self, connection: TelnetConnection) -> None:
+        assert connection.receive_data(b"hello\xff") == [ApplicationDataReceived(data=b"hello")]
+        assert connection.receive_data(b"\xf6") == [CommandReceived(code=CommandCode.AYT)]
+
+    def test_receive_data_application_data_iac_fragmented(self, connection: TelnetConnection) -> None:
+        assert connection.receive_data(b"hello\xff") == [ApplicationDataReceived(data=b"hello")]
+        assert connection.receive_data(b"\xff") == [ApplicationDataReceived(data=b"\xff")]
 
     @pytest.mark.parametrize(
         "receive_data, application_data",
@@ -94,6 +102,7 @@ class TestTelnetConnection:
             (b"\r\x00\r\x00", b"\r\r"),
             (b"hello\r\x00world", b"hello\rworld"),
             (b"\r\x00\r\n", b"\r\n"),
+            (b"\r\r\n", b"\r\n"),
         ],
     )
     def test_receive_data_application_data_nvt_decode(
@@ -103,7 +112,11 @@ class TestTelnetConnection:
 
     @pytest.mark.parametrize(
         "receive_data, application_data",
-        [((b"a\r", b"\nb"), (b"a", b"\nb")), ((b"a\r", b"\x00b"), (b"a", b"\rb")), ((b"a\r", b"b"), (b"a", b"\rb"))],
+        [
+            ((b"a\r", b"\nb"), (b"a", b"\nb")),
+            ((b"a\r", b"\x00b"), (b"a", b"\rb")),
+            ((b"a\r", b"b"), (b"a", b"\rb")),
+        ],
     )
     def test_receive_data_application_data_nvt_fragmented(
         self, connection: TelnetConnection, receive_data: tuple[bytes, bytes], application_data: tuple[bytes, bytes]
