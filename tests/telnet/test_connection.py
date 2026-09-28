@@ -10,7 +10,7 @@ from honeypotter.telnet.events import (
     NegotiationReceived,
     SubnegotiationReceived,
 )
-from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb
+from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb, Side
 
 
 class TestTelnetConnection:
@@ -201,3 +201,13 @@ class TestTelnetConnection:
         assert connection.receive_data(data[split:]) == [
             SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
         ]
+
+    def test_request_option(self, connection: TelnetConnection) -> None:
+        connection.request_option(NegotiationOption.ECHO, side=Side.LOCAL, enabled=True)
+        connection.request_option(NegotiationOption.SGA, side=Side.LOCAL, enabled=True)
+        connection.request_option(NegotiationOption.SGA, side=Side.REMOTE, enabled=True)
+
+        assert connection.data_to_send() == b"\xff\xfb\x01\xff\xfb\x03\xff\xfd\x03"
+        assert connection.is_option_enabled(NegotiationOption.ECHO, side=Side.LOCAL) is False
+        assert connection.is_option_enabled(NegotiationOption.SGA, side=Side.LOCAL) is False
+        assert connection.is_option_enabled(NegotiationOption.SGA, side=Side.REMOTE) is False

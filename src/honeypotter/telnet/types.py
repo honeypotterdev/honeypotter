@@ -1,4 +1,4 @@
-from enum import IntEnum
+from enum import Enum, IntEnum, auto
 
 
 class DynamicIntEnum(IntEnum):
@@ -34,3 +34,8 @@ class NegotiationVerb(IntEnum):
     WONT = 252
     DO = 253
     DONT = 254
+
+
+class Side(Enum):
+    LOCAL = auto()
+    REMOTE = auto()

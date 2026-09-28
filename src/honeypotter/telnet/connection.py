@@ -13,10 +13,12 @@ from honeypotter.telnet.events import (
     NegotiationReceived,
     SubnegotiationReceived,
 )
+from honeypotter.telnet.options import OptionsNegotiator
 from honeypotter.telnet.types import (
     CommandCode,
     NegotiationOption,
     NegotiationVerb,
+    Side,
 )
 
 
@@ -31,7 +33,16 @@ class State(Enum):
 
 
 class TelnetConnection:
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        allowed_local_options: set[NegotiationOption] | None = None,
+        allowed_remote_options: set[NegotiationOption] | None = None,
+    ) -> None:
+        self._allowed_local_options = allowed_local_options or set()
+        self._allowed_remote_options = allowed_remote_options or set()
+        self._local_options = OptionsNegotiator()
+        self._remote_options = OptionsNegotiator()
+
         self._data_to_send_buffer = bytearray()
         self._app_buffer = bytearray()
         self._subnegotiation_buffer = bytearray()
@@ -91,6 +102,29 @@ class TelnetConnection:
         self._event_buffer = []
 
         return events
+
+    def request_option(self, option: NegotiationOption, *, side: Side, enabled: bool) -> None:
+        options = self._local_options if side == Side.LOCAL else self._remote_options
+        action = options.request(option, enabled)
+
+        if action is None:
+            return
+
+        mapping = {
+            (Side.LOCAL, True): NegotiationVerb.WILL,
+            (Side.LOCAL, False): NegotiationVerb.WONT,
+            (Side.REMOTE, True): NegotiationVerb.DO,
+            (Side.REMOTE, False): NegotiationVerb.DONT,
+        }
+
+        verb = mapping[(side, enabled)]
+
+        self.send_negotiation(verb=verb, option=option)
+
+    def is_option_enabled(self, option: NegotiationOption, *, side: Side) -> bool:
+        options = self._local_options if side == Side.LOCAL else self._remote_options
+
+        return options.is_enabled(option)
 
     def _encode_application_data(self, data: bytes) -> bytes:
         encoded_data = bytearray()
