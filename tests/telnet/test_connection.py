@@ -101,6 +101,16 @@ class TestTelnetConnection:
     ) -> None:
         assert connection.receive_data(receive_data) == [ApplicationDataReceived(data=application_data)]
 
+    @pytest.mark.parametrize(
+        "receive_data, application_data",
+        [((b"a\r", b"\nb"), (b"a", b"\nb")), ((b"a\r", b"\x00b"), (b"a", b"\rb")), ((b"a\r", b"b"), (b"a", b"\rb"))],
+    )
+    def test_receive_data_application_data_nvt_fragmented(
+        self, connection: TelnetConnection, receive_data: tuple[bytes, bytes], application_data: tuple[bytes, bytes]
+    ) -> None:
+        assert connection.receive_data(receive_data[0]) == [ApplicationDataReceived(data=application_data[0])]
+        assert connection.receive_data(receive_data[1]) == [ApplicationDataReceived(data=application_data[1])]
+
     # TODO: Test app data flush on all intermediate events
     def test_receive_data_application_data_flush(self, connection: TelnetConnection) -> None:
         peer_connection = TelnetConnection()
