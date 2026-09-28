@@ -211,3 +211,11 @@ class TestTelnetConnection:
         assert connection.is_option_enabled(NegotiationOption.ECHO, side=Side.LOCAL) is False
         assert connection.is_option_enabled(NegotiationOption.SGA, side=Side.LOCAL) is False
         assert connection.is_option_enabled(NegotiationOption.SGA, side=Side.REMOTE) is False
+
+        response = b"\xff\xfd\x01\xff\xfd\x03\xff\xfb\x03"  # DO ECHO, DO SGA, WILL SGA
+
+        assert connection.receive_data(response) == [
+            NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO),
+            NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.SGA),
+            NegotiationReceived(verb=NegotiationVerb.WILL, option=NegotiationOption.SGA),
+        ]

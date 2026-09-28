@@ -96,6 +96,10 @@ class TelnetConnection:
             if event is not None:
                 self._event_buffer.append(event)
 
+                if isinstance(event, NegotiationReceived):
+                    # TODO: Update options, fire OptionStateChanged
+                    pass
+
         self._flush_app_buffer()
 
         events = self._event_buffer
