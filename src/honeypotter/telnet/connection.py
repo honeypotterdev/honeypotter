@@ -106,9 +106,7 @@ class TelnetConnection:
         return data
 
     def send_application_data(self, data: bytes) -> None:
-        data = data.replace(b"\xff", b"\xff\xff")
-
-        self._data_to_send_buffer.extend(data)
+        self._data_to_send_buffer.extend(data.replace(b"\xff", b"\xff\xff"))
 
     def send_command(self, code: int) -> None:
         self._data_to_send_buffer.extend(b"\xff" + code.to_bytes())
