@@ -1,8 +1,10 @@
 from enum import Enum, auto
+from functools import partial
 from typing import Any
 
 from honeypotter.constants import CR, LF
 from honeypotter.statemachine import Machine, MachineError, Transition
+from honeypotter.telnet.codes import IAC, SB, SE
 from honeypotter.telnet.events import (
     ApplicationDataReceived,
     CommandReceived,
@@ -33,72 +35,16 @@ class TelnetConnection:
         self._data_to_send_buffer = bytearray()
         self._app_buffer = bytearray()
         self._subnegotiation_buffer = bytearray()
-        self._event_buffer = []
+        self._event_buffer: list[Event] = []
         self._negotiation_verb = 0
         self._subnegotiation_option = 0
         self._is_failed = False
 
-        self._machine = Machine(
-            model=self,
-            initial=State.READ_APPLICATION_DATA,
-            transitions=[
-                Transition("byte", State.READ_APPLICATION_DATA, State.IAC, condition="_is_iac"),
-                Transition(
-                    "byte", State.READ_APPLICATION_DATA, State.READ_APPLICATION_DATA, action="_app_buffer_append"
-                ),
-                Transition(
-                    "byte", State.IAC, State.READ_APPLICATION_DATA, condition="_is_iac", action="_app_buffer_append"
-                ),
-                Transition(
-                    "byte",
-                    State.IAC,
-                    State.READ_NEGOTIATION_OPTION,
-                    condition="_is_verb",
-                    action="_store_verb",
-                    before="_flush_app_buffer",
-                ),
-                Transition(
-                    "byte", State.IAC, State.READ_SUBNEGOTIATION_OPTION, condition="_is_sb", before="_flush_app_buffer"
-                ),
-                Transition(
-                    "byte",
-                    State.IAC,
-                    State.READ_APPLICATION_DATA,
-                    action="_finalize_command",
-                    before="_flush_app_buffer",
-                ),
-                Transition(
-                    "byte", State.READ_NEGOTIATION_OPTION, State.READ_APPLICATION_DATA, action="_finalize_negotiation"
-                ),
-                Transition(
-                    "byte",
-                    State.READ_SUBNEGOTIATION_OPTION,
-                    State.READ_SUBNEGOTIATION_DATA,
-                    action="_store_subnegotiation_option",
-                ),
-                Transition("byte", State.READ_SUBNEGOTIATION_DATA, State.READ_SUBNEGOTIATION_IAC, condition="_is_iac"),
-                Transition(
-                    "byte",
-                    State.READ_SUBNEGOTIATION_DATA,
-                    State.READ_SUBNEGOTIATION_DATA,
-                    action="_subnegotiation_buffer_append",
-                ),
-                Transition(
-                    "byte",
-                    State.READ_SUBNEGOTIATION_IAC,
-                    State.READ_SUBNEGOTIATION_DATA,
-                    condition="_is_iac",
-                    action="_subnegotiation_buffer_append",
-                ),
-                Transition(
-                    "byte",
-                    State.READ_SUBNEGOTIATION_IAC,
-                    State.READ_APPLICATION_DATA,
-                    condition="_is_se",
-                    action="_finalize_subnegotiation",
-                ),
-            ],
-        )
+        self._machine = self._create_machine()
+
+    @property
+    def is_failed(self) -> bool:
+        return self._is_failed
 
     def data_to_send(self) -> bytes:
         data = bytes(self._data_to_send_buffer)
@@ -107,29 +53,19 @@ class TelnetConnection:
         return data
 
     def send_application_data(self, data: bytes) -> None:
-        encoded_data = bytearray()
-
-        for byte in data:
-            if byte == 255:
-                encoded_data.extend(b"\xff\xff")
-            elif byte == LF:
-                encoded_data.extend(b"\r\n")
-            elif byte == CR:
-                encoded_data.extend(b"\r\x00")
-            else:
-                encoded_data.append(byte)
-
-        self._data_to_send_buffer.extend(encoded_data)
+        self._data_to_send_buffer.extend(self._encode_application_data(data))
 
     def send_command(self, code: int) -> None:
-        self._data_to_send_buffer.extend(b"\xff" + code.to_bytes())
+        self._data_to_send_buffer.extend(IAC.to_bytes() + code.to_bytes())
 
     def send_negotiation(self, verb: int, option: NegotiationOption) -> None:
-        self._data_to_send_buffer.extend(b"\xff" + verb.to_bytes() + option.to_bytes())
+        self._data_to_send_buffer.extend(IAC.to_bytes() + verb.to_bytes() + option.to_bytes())
 
     def send_subnegotiation(self, option: int, data: bytes) -> None:
+        data = data.replace(b"\xff", b"\xff\xff")
+
         self._data_to_send_buffer.extend(
-            b"\xff\xfa" + option.to_bytes() + data.replace(b"\xff", b"\xff\xff") + b"\xff\xf0"
+            IAC.to_bytes() + SB.to_bytes() + option.to_bytes() + data + IAC.to_bytes() + SE.to_bytes()
         )
 
     def receive_data(self, data: bytes) -> list[Event]:
@@ -155,14 +91,75 @@ class TelnetConnection:
 
         return events
 
+    def _encode_application_data(self, data: bytes) -> bytes:
+        encoded_data = bytearray()
+
+        for byte in data:
+            if byte == IAC:
+                encoded_data.extend(b"\xff\xff")
+            elif byte == LF:
+                encoded_data.extend(b"\r\n")
+            elif byte == CR:
+                encoded_data.extend(b"\r\x00")
+            else:
+                encoded_data.append(byte)
+
+        return bytes(encoded_data)
+
+    def _create_machine(self) -> Machine[State, str]:
+        t = partial(Transition, "byte")
+
+        return Machine[State, str](
+            model=self,
+            initial=State.READ_APPLICATION_DATA,
+            transitions=[
+                t(State.READ_APPLICATION_DATA, State.IAC, condition="_is_iac"),
+                t(State.READ_APPLICATION_DATA, State.READ_APPLICATION_DATA, action="_app_buffer_append"),
+                t(State.IAC, State.READ_APPLICATION_DATA, condition="_is_iac", action="_app_buffer_append"),
+                t(
+                    State.IAC,
+                    State.READ_NEGOTIATION_OPTION,
+                    condition="_is_verb",
+                    action="_store_verb",
+                    before="_flush_app_buffer",
+                ),
+                t(State.IAC, State.READ_SUBNEGOTIATION_OPTION, condition="_is_sb", before="_flush_app_buffer"),
+                t(State.IAC, State.READ_APPLICATION_DATA, action="_finalize_command", before="_flush_app_buffer"),
+                t(State.READ_NEGOTIATION_OPTION, State.READ_APPLICATION_DATA, action="_finalize_negotiation"),
+                t(
+                    State.READ_SUBNEGOTIATION_OPTION,
+                    State.READ_SUBNEGOTIATION_DATA,
+                    action="_store_subnegotiation_option",
+                ),
+                t(State.READ_SUBNEGOTIATION_DATA, State.READ_SUBNEGOTIATION_IAC, condition="_is_iac"),
+                t(
+                    State.READ_SUBNEGOTIATION_DATA,
+                    State.READ_SUBNEGOTIATION_DATA,
+                    action="_subnegotiation_buffer_append",
+                ),
+                t(
+                    State.READ_SUBNEGOTIATION_IAC,
+                    State.READ_SUBNEGOTIATION_DATA,
+                    condition="_is_iac",
+                    action="_subnegotiation_buffer_append",
+                ),
+                t(
+                    State.READ_SUBNEGOTIATION_IAC,
+                    State.READ_APPLICATION_DATA,
+                    condition="_is_se",
+                    action="_finalize_subnegotiation",
+                ),
+            ],
+        )
+
     def _is_iac(self, byte: int) -> bool:
-        return byte == 255
+        return byte == IAC
 
     def _is_sb(self, byte: int) -> bool:
-        return byte == 250
+        return byte == SB
 
     def _is_se(self, byte: int) -> bool:
-        return byte == 240
+        return byte == SE
 
     def _is_verb(self, byte: int) -> bool:
         return NegotiationVerb.WILL <= byte <= NegotiationVerb.DONT
@@ -181,7 +178,7 @@ class TelnetConnection:
     def _store_verb(self, byte: int) -> None:
         self._negotiation_verb = byte
 
-    def _store_subnegotiation_option(self, byte) -> None:
+    def _store_subnegotiation_option(self, byte: int) -> None:
         self._subnegotiation_option = byte
 
     def _finalize_command(self, byte: int) -> CommandReceived:
