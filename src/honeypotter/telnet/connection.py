@@ -14,12 +14,7 @@ from honeypotter.telnet.events import (
     SubnegotiationReceived,
 )
 from honeypotter.telnet.options import OptionNegotiator
-from honeypotter.telnet.types import (
-    CommandCode,
-    NegotiationOption,
-    NegotiationVerb,
-    Side,
-)
+from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb, Side
 
 
 class State(Enum):

@@ -35,6 +35,8 @@ class TestOptionNegotiator:
         assert negotiator.request_disable(1) == NegotiationResult(action=None, option_changed=False)
         assert negotiator.is_enabled(1) is False
 
+    # TODO: Port tests from legacy
+
     def _enable(self, negotiator: OptionNegotiator, option: int) -> None:
         assert negotiator.receive_enable(option, allowed=True) == NegotiationResult(
             action=NegotiationAction.SEND_ENABLE, option_changed=True
