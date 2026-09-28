@@ -125,8 +125,7 @@ class TestTelnetConnection:
         assert connection.receive_data(receive_data[0]) == [ApplicationDataReceived(data=application_data[0])]
         assert connection.receive_data(receive_data[1]) == [ApplicationDataReceived(data=application_data[1])]
 
-    # TODO: Test app data flush on all intermediate events
-    def test_receive_data_application_data_flush(self, connection: TelnetConnection) -> None:
+    def test_receive_data_application_data_before_and_after_command(self, connection: TelnetConnection) -> None:
         peer_connection = TelnetConnection()
         peer_connection.send_application_data(b"foo")
         peer_connection.send_command(CommandCode.AYT)
@@ -135,6 +134,30 @@ class TestTelnetConnection:
         assert connection.receive_data(peer_connection.data_to_send()) == [
             ApplicationDataReceived(data=b"foo"),
             CommandReceived(code=CommandCode.AYT),
+            ApplicationDataReceived(data=b"bar"),
+        ]
+
+    def test_receive_data_application_data_before_and_after_negotiation(self, connection: TelnetConnection) -> None:
+        peer_connection = TelnetConnection()
+        peer_connection.send_application_data(b"foo")
+        peer_connection.send_negotiation(NegotiationVerb.DO, NegotiationOption.ECHO)
+        peer_connection.send_application_data(b"bar")
+
+        assert connection.receive_data(peer_connection.data_to_send()) == [
+            ApplicationDataReceived(data=b"foo"),
+            NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO),
+            ApplicationDataReceived(data=b"bar"),
+        ]
+
+    def test_receive_data_application_data_before_and_after_subnegotiation(self, connection: TelnetConnection) -> None:
+        peer_connection = TelnetConnection()
+        peer_connection.send_application_data(b"foo")
+        peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"\x00\x64\x00\x32")
+        peer_connection.send_application_data(b"bar")
+
+        assert connection.receive_data(peer_connection.data_to_send()) == [
+            ApplicationDataReceived(data=b"foo"),
+            SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32"),
             ApplicationDataReceived(data=b"bar"),
         ]
 
@@ -168,13 +191,13 @@ class TestTelnetConnection:
             SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"")
         ]
 
-    @pytest.mark.parametrize("chunk", list(range(2)))
-    def test_receive_data_subnegotiation_fragmented(self, connection: TelnetConnection, chunk: int) -> None:
+    @pytest.mark.parametrize("split", list(range(4)))
+    def test_receive_data_subnegotiation_fragmented(self, connection: TelnetConnection, split: int) -> None:
         peer_connection = TelnetConnection()
         peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"\x00\x64\x00\x32")
         data = peer_connection.data_to_send()
 
-        assert connection.receive_data(data[:chunk]) == []
-        assert connection.receive_data(data[chunk:]) == [
+        assert connection.receive_data(data[:split]) == []
+        assert connection.receive_data(data[split:]) == [
             SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
         ]
