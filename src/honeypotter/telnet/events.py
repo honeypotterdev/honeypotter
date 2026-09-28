@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from honeypotter.telnet.values import CommandCode, NegotiationOption, NegotiationVerb
+from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb
 
 
 class Event:
@@ -27,3 +27,7 @@ class NegotiationReceived(Event):
 class SubnegotiationReceived(Event):
     option: NegotiationOption
     data: bytes
+
+
+class ConnectionFailed(Event):
+    pass

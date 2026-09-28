@@ -9,7 +9,7 @@ from honeypotter.telnet.events import (
     NegotiationReceived,
     SubnegotiationReceived,
 )
-from honeypotter.telnet.values import CommandCode, NegotiationOption, NegotiationVerb
+from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb
 
 
 class TestTelnetConnection:

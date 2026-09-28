@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Any
 
@@ -6,18 +5,15 @@ from honeypotter.statemachine import Machine, MachineError, Transition
 from honeypotter.telnet.events import (
     ApplicationDataReceived,
     CommandReceived,
+    ConnectionFailed,
+    Event,
     NegotiationReceived,
     SubnegotiationReceived,
 )
-from honeypotter.telnet.values import (
-    ApplicationData,
-    Command,
+from honeypotter.telnet.types import (
     CommandCode,
-    Negotiation,
     NegotiationOption,
     NegotiationVerb,
-    Subnegotiation,
-    Value,
 )
 
 
@@ -29,14 +25,6 @@ class State(Enum):
     READ_SUBNEGOTIATION_OPTION = auto()
     READ_SUBNEGOTIATION_DATA = auto()
     READ_SUBNEGOTIATION_IAC = auto()
-
-
-@dataclass(frozen=True, kw_only=True)
-class ConnectionFailed:
-    pass
-
-
-type ConnectionEvent = Value | ConnectionFailed
 
 
 class TelnetConnection:
@@ -118,18 +106,22 @@ class TelnetConnection:
         return data
 
     def send_application_data(self, data: bytes) -> None:
-        self._data_to_send_buffer.extend(ApplicationData(data=data).to_bytes())
+        data = data.replace(b"\xff", b"\xff\xff")
+
+        self._data_to_send_buffer.extend(data)
 
     def send_command(self, code: int) -> None:
-        self._data_to_send_buffer.extend(Command(code=CommandCode(code)).to_bytes())
+        self._data_to_send_buffer.extend(b"\xff" + code.to_bytes())
 
     def send_negotiation(self, verb: int, option: NegotiationOption) -> None:
-        self._data_to_send_buffer.extend(Negotiation(verb=NegotiationVerb(verb), option=option).to_bytes())
+        self._data_to_send_buffer.extend(b"\xff" + verb.to_bytes() + option.to_bytes())
 
     def send_subnegotiation(self, option: int, data: bytes) -> None:
-        self._data_to_send_buffer.extend(Subnegotiation(option=NegotiationOption(option), data=data).to_bytes())
+        self._data_to_send_buffer.extend(
+            b"\xff\xfa" + option.to_bytes() + data.replace(b"\xff", b"\xff\xff") + b"\xff\xf0"
+        )
 
-    def receive_data(self, data: bytes) -> list[ConnectionEvent]:
+    def receive_data(self, data: bytes) -> list[Event]:
         if self._is_failed:
             return []
 
