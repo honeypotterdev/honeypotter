@@ -125,7 +125,7 @@ class TestTelnetConnection:
         assert connection.receive_data(receive_data[0]) == [ApplicationDataReceived(data=application_data[0])]
         assert connection.receive_data(receive_data[1]) == [ApplicationDataReceived(data=application_data[1])]
 
-    def test_receive_data_application_data_before_and_after_command(self, connection: TelnetConnection) -> None:
+    def test_receive_data_application_data_before_command(self, connection: TelnetConnection) -> None:
         peer_connection = TelnetConnection()
         peer_connection.send_application_data(b"foo")
         peer_connection.send_command(CommandCode.AYT)
@@ -137,7 +137,7 @@ class TestTelnetConnection:
             ApplicationDataReceived(data=b"bar"),
         ]
 
-    def test_receive_data_application_data_before_and_after_negotiation(self, connection: TelnetConnection) -> None:
+    def test_receive_data_application_data_before_negotiation(self, connection: TelnetConnection) -> None:
         peer_connection = TelnetConnection()
         peer_connection.send_application_data(b"foo")
         peer_connection.send_negotiation(NegotiationVerb.DO, NegotiationOption.ECHO)
@@ -149,7 +149,7 @@ class TestTelnetConnection:
             ApplicationDataReceived(data=b"bar"),
         ]
 
-    def test_receive_data_application_data_before_and_after_subnegotiation(self, connection: TelnetConnection) -> None:
+    def test_receive_data_application_data_before_subnegotiation(self, connection: TelnetConnection) -> None:
         peer_connection = TelnetConnection()
         peer_connection.send_application_data(b"foo")
         peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"\x00\x64\x00\x32")
