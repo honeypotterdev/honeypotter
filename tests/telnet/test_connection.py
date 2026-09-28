@@ -71,16 +71,35 @@ class TestTelnetConnection:
 
         assert connection.data_to_send() == b"\xff\xfa\x1f\x00\x64\x00\x32\xff\xf0"
 
-    def test_send_subnegotiation_double_iac(self, connection: TelnetConnection) -> None:
+    def test_send_subnegotiation_iac_escape(self, connection: TelnetConnection) -> None:
         connection.send_subnegotiation(option=1, data=b"\xff")
 
         assert connection.data_to_send() == b"\xff\xfa\x01\xff\xff\xff\xf0"
 
+    # TODO: Generate bytes with hypothesis
     def test_receive_data_application_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo") == [ApplicationDataReceived(data=b"foo")]
 
-    def test_receive_data_application_data_double_iac(self, connection: TelnetConnection) -> None:
+    def test_receive_data_application_data_iac_escape(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"\xff\xff") == [ApplicationDataReceived(data=b"\xff")]
+
+    @pytest.mark.parametrize(
+        "receive_data, application_data",
+        [
+            (b"hello", b"hello"),
+            (b"hello\r\n", b"hello\n"),
+            (b"\r\n\r\n", b"\n\n"),
+            (b"hello\r\nworld", b"hello\nworld"),
+            (b"hello\r\x00", b"hello\r"),
+            (b"\r\x00\r\x00", b"\r\r"),
+            (b"hello\r\x00world", b"hello\rworld"),
+            (b"\r\x00\r\n", b"\r\n"),
+        ],
+    )
+    def test_receive_data_application_data_nvt_decode(
+        self, connection: TelnetConnection, receive_data: bytes, application_data: bytes
+    ) -> None:
+        assert connection.receive_data(receive_data) == [ApplicationDataReceived(data=application_data)]
 
     # TODO: Test app data flush on all intermediate events
     def test_receive_data_application_data_flush(self, connection: TelnetConnection) -> None:

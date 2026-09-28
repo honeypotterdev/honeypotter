@@ -2,7 +2,7 @@ from enum import Enum, auto
 from functools import partial
 from typing import Any
 
-from honeypotter.constants import CR, LF
+from honeypotter.constants import CR, LF, NUL
 from honeypotter.statemachine import Machine, MachineError, Transition
 from honeypotter.telnet.codes import IAC, SB, SE
 from honeypotter.telnet.events import (
@@ -38,6 +38,7 @@ class TelnetConnection:
         self._event_buffer: list[Event] = []
         self._negotiation_verb = 0
         self._subnegotiation_option = 0
+        self._pending_cr = False
         self._is_failed = False
 
         self._machine = self._create_machine()
@@ -170,7 +171,25 @@ class TelnetConnection:
             self._app_buffer.clear()
 
     def _app_buffer_append(self, byte: int) -> None:
-        self._app_buffer.append(byte)
+        if not self._pending_cr and byte == CR:
+            self._pending_cr = True
+            return
+
+        if not self._pending_cr:
+            self._app_buffer.append(byte)
+            return
+
+        self._pending_cr = False
+
+        if byte == LF:
+            self._app_buffer.append(LF)
+            return
+
+        if byte == NUL:
+            self._app_buffer.append(CR)
+            return
+
+        self._app_buffer.extend(CR.to_bytes() + byte.to_bytes())
 
     def _subnegotiation_buffer_append(self, byte: int) -> None:
         self._subnegotiation_buffer.append(byte)
