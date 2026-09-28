@@ -13,7 +13,7 @@ from honeypotter.telnet.events import (
     NegotiationReceived,
     SubnegotiationReceived,
 )
-from honeypotter.telnet.options import OptionsNegotiator
+from honeypotter.telnet.options import OptionNegotiator
 from honeypotter.telnet.types import (
     CommandCode,
     NegotiationOption,
@@ -40,8 +40,8 @@ class TelnetConnection:
     ) -> None:
         self._allowed_local_options = allowed_local_options or set()
         self._allowed_remote_options = allowed_remote_options or set()
-        self._local_options = OptionsNegotiator()
-        self._remote_options = OptionsNegotiator()
+        self._local_options = OptionNegotiator()
+        self._remote_options = OptionNegotiator()
 
         self._data_to_send_buffer = bytearray()
         self._app_buffer = bytearray()

@@ -4,12 +4,12 @@ from enum import Enum, auto
 from honeypotter.statemachine import Machine, Transition
 
 
-class OptionAction(Enum):
+class NegotiationAction(Enum):
     SEND_ENABLE = auto()
     SEND_DISABLE = auto()
 
 
-class OptionState(Enum):
+class QState(Enum):
     NO = auto()
     YES = auto()
     WANTNO_EMPTY = auto()
@@ -18,151 +18,104 @@ class OptionState(Enum):
     WANTYES_OPPOSITE = auto()
 
 
-class OptionInput(Enum):
+class QInput(Enum):
     REQUEST_ENABLE = auto()
     REQUEST_DISABLE = auto()
-    RECEIVE_ENABLE_ACCEPT = auto()
-    RECEIVE_ENABLE_REJECT = auto()
+    RECEIVE_ENABLE_ALLOWED = auto()
+    RECEIVE_ENABLE_DISALLOWED = auto()
     RECEIVE_DISABLE = auto()
 
 
-class TelnetOption:
+class QMethod:
     def __init__(self) -> None:
         self._machine = Machine(
             model=self,
-            initial=OptionState.NO,
+            initial=QState.NO,
             raise_on_invalid_transition=False,
             transitions=[
                 # NO
                 Transition(
-                    source=OptionState.NO,
-                    event=OptionInput.REQUEST_ENABLE,
-                    target=OptionState.WANTYES_EMPTY,
-                    action="send_enable",
+                    source=QState.NO, event=QInput.REQUEST_ENABLE, target=QState.WANTYES_EMPTY, action="send_enable"
                 ),
                 Transition(
-                    source=OptionState.NO,
-                    event=OptionInput.RECEIVE_ENABLE_ACCEPT,
-                    target=OptionState.YES,
-                    action="send_enable",
+                    source=QState.NO, event=QInput.RECEIVE_ENABLE_ALLOWED, target=QState.YES, action="send_enable"
                 ),
                 Transition(
-                    source=OptionState.NO,
-                    event=OptionInput.RECEIVE_ENABLE_REJECT,
-                    target=OptionState.NO,
-                    action="send_disable",
+                    source=QState.NO, event=QInput.RECEIVE_ENABLE_DISALLOWED, target=QState.NO, action="send_disable"
                 ),
                 # YES
                 Transition(
-                    source=OptionState.YES,
-                    event=OptionInput.REQUEST_DISABLE,
-                    target=OptionState.WANTNO_EMPTY,
-                    action="send_disable",
+                    source=QState.YES, event=QInput.REQUEST_DISABLE, target=QState.WANTNO_EMPTY, action="send_disable"
                 ),
-                Transition(
-                    source=OptionState.YES,
-                    event=OptionInput.RECEIVE_DISABLE,
-                    target=OptionState.NO,
-                    action="send_disable",
-                ),
+                Transition(source=QState.YES, event=QInput.RECEIVE_DISABLE, target=QState.NO, action="send_disable"),
                 # WANTNO_EMPTY
-                Transition(
-                    source=OptionState.WANTNO_EMPTY,
-                    event=OptionInput.REQUEST_ENABLE,
-                    target=OptionState.WANTNO_OPPOSITE,
-                ),
-                Transition(
-                    source=OptionState.WANTNO_EMPTY, event=OptionInput.RECEIVE_ENABLE_ACCEPT, target=OptionState.NO
-                ),
-                Transition(
-                    source=OptionState.WANTNO_EMPTY, event=OptionInput.RECEIVE_ENABLE_REJECT, target=OptionState.NO
-                ),
-                Transition(source=OptionState.WANTNO_EMPTY, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO),
+                Transition(source=QState.WANTNO_EMPTY, event=QInput.REQUEST_ENABLE, target=QState.WANTNO_OPPOSITE),
+                Transition(source=QState.WANTNO_EMPTY, event=QInput.RECEIVE_ENABLE_ALLOWED, target=QState.NO),
+                Transition(source=QState.WANTNO_EMPTY, event=QInput.RECEIVE_ENABLE_DISALLOWED, target=QState.NO),
+                Transition(source=QState.WANTNO_EMPTY, event=QInput.RECEIVE_DISABLE, target=QState.NO),
                 # WANTNO_OPPOSITE
+                Transition(source=QState.WANTNO_OPPOSITE, event=QInput.REQUEST_DISABLE, target=QState.WANTNO_EMPTY),
+                Transition(source=QState.WANTNO_OPPOSITE, event=QInput.RECEIVE_ENABLE_ALLOWED, target=QState.YES),
+                Transition(source=QState.WANTNO_OPPOSITE, event=QInput.RECEIVE_ENABLE_DISALLOWED, target=QState.YES),
                 Transition(
-                    source=OptionState.WANTNO_OPPOSITE,
-                    event=OptionInput.REQUEST_DISABLE,
-                    target=OptionState.WANTNO_EMPTY,
-                ),
-                Transition(
-                    source=OptionState.WANTNO_OPPOSITE, event=OptionInput.RECEIVE_ENABLE_ACCEPT, target=OptionState.YES
-                ),
-                Transition(
-                    source=OptionState.WANTNO_OPPOSITE, event=OptionInput.RECEIVE_ENABLE_REJECT, target=OptionState.YES
-                ),
-                Transition(
-                    source=OptionState.WANTNO_OPPOSITE,
-                    event=OptionInput.RECEIVE_DISABLE,
-                    target=OptionState.WANTYES_EMPTY,
+                    source=QState.WANTNO_OPPOSITE,
+                    event=QInput.RECEIVE_DISABLE,
+                    target=QState.WANTYES_EMPTY,
                     action="send_enable",
                 ),
                 # WANTYES_EMPTY
-                Transition(
-                    source=OptionState.WANTYES_EMPTY,
-                    event=OptionInput.REQUEST_DISABLE,
-                    target=OptionState.WANTYES_OPPOSITE,
-                ),
-                Transition(
-                    source=OptionState.WANTYES_EMPTY, event=OptionInput.RECEIVE_ENABLE_ACCEPT, target=OptionState.YES
-                ),
-                Transition(
-                    source=OptionState.WANTYES_EMPTY, event=OptionInput.RECEIVE_ENABLE_REJECT, target=OptionState.YES
-                ),
-                Transition(source=OptionState.WANTYES_EMPTY, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO),
+                Transition(source=QState.WANTYES_EMPTY, event=QInput.REQUEST_DISABLE, target=QState.WANTYES_OPPOSITE),
+                Transition(source=QState.WANTYES_EMPTY, event=QInput.RECEIVE_ENABLE_ALLOWED, target=QState.YES),
+                Transition(source=QState.WANTYES_EMPTY, event=QInput.RECEIVE_ENABLE_DISALLOWED, target=QState.YES),
+                Transition(source=QState.WANTYES_EMPTY, event=QInput.RECEIVE_DISABLE, target=QState.NO),
                 # WANTYES_OPPOSITE
+                Transition(source=QState.WANTYES_OPPOSITE, event=QInput.REQUEST_ENABLE, target=QState.WANTYES_EMPTY),
                 Transition(
-                    source=OptionState.WANTYES_OPPOSITE,
-                    event=OptionInput.REQUEST_ENABLE,
-                    target=OptionState.WANTYES_EMPTY,
-                ),
-                Transition(
-                    source=OptionState.WANTYES_OPPOSITE,
-                    event=OptionInput.RECEIVE_ENABLE_ACCEPT,
-                    target=OptionState.WANTNO_EMPTY,
+                    source=QState.WANTYES_OPPOSITE,
+                    event=QInput.RECEIVE_ENABLE_ALLOWED,
+                    target=QState.WANTNO_EMPTY,
                     action="send_disable",
                 ),
                 Transition(
-                    source=OptionState.WANTYES_OPPOSITE,
-                    event=OptionInput.RECEIVE_ENABLE_REJECT,
-                    target=OptionState.WANTNO_EMPTY,
+                    source=QState.WANTYES_OPPOSITE,
+                    event=QInput.RECEIVE_ENABLE_DISALLOWED,
+                    target=QState.WANTNO_EMPTY,
                     action="send_disable",
                 ),
-                Transition(
-                    source=OptionState.WANTYES_OPPOSITE, event=OptionInput.RECEIVE_DISABLE, target=OptionState.NO
-                ),
+                Transition(source=QState.WANTYES_OPPOSITE, event=QInput.RECEIVE_DISABLE, target=QState.NO),
             ],
         )
 
     @property
-    def state(self) -> OptionState:
+    def state(self) -> QState:
         return self._machine.state
 
-    def handle_input(self, option_input: OptionInput) -> OptionAction | None:
+    def handle_input(self, option_input: QInput) -> NegotiationAction | None:
         return self._machine.trigger(option_input)
 
-    def send_enable(self) -> OptionAction:
-        return OptionAction.SEND_ENABLE
+    def send_enable(self) -> NegotiationAction:
+        return NegotiationAction.SEND_ENABLE
 
-    def send_disable(self) -> OptionAction:
-        return OptionAction.SEND_DISABLE
+    def send_disable(self) -> NegotiationAction:
+        return NegotiationAction.SEND_DISABLE
 
 
-class OptionsNegotiator:
+class OptionNegotiator:
     def __init__(self) -> None:
-        self._options: dict[int, TelnetOption] = defaultdict[int, TelnetOption](lambda: TelnetOption())
+        self._options: dict[int, QMethod] = defaultdict[int, QMethod](lambda: QMethod())
 
     def is_enabled(self, option: int) -> bool:
-        return self._options[option].state is OptionState.YES
+        return self._options[option].state is QState.YES
 
-    def request(self, option: int, enabled: bool) -> OptionAction | None:
-        option_input = OptionInput.REQUEST_ENABLE if enabled else OptionInput.REQUEST_DISABLE
+    def request(self, option: int, enabled: bool) -> NegotiationAction | None:
+        option_input = QInput.REQUEST_ENABLE if enabled else QInput.REQUEST_DISABLE
 
         return self._options[option].handle_input(option_input)
 
-    def receive_enable(self, option: int, *, accept: bool) -> OptionAction | None:
+    def receive_enable(self, option: int, *, allow: bool) -> NegotiationAction | None:
         return self._options[option].handle_input(
-            OptionInput.RECEIVE_ENABLE_ACCEPT if accept else OptionInput.RECEIVE_ENABLE_REJECT
+            QInput.RECEIVE_ENABLE_ALLOWED if allow else QInput.RECEIVE_ENABLE_DISALLOWED
         )
 
-    def receive_disable(self, option: int) -> OptionAction | None:
-        return self._options[option].handle_input(OptionInput.RECEIVE_DISABLE)
+    def receive_disable(self, option: int) -> NegotiationAction | None:
+        return self._options[option].handle_input(QInput.RECEIVE_DISABLE)
