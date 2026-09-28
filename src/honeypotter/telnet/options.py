@@ -1,4 +1,5 @@
 from collections import defaultdict
+from dataclasses import dataclass
 from enum import Enum, auto
 
 from honeypotter.statemachine import Machine, Transition
@@ -7,6 +8,12 @@ from honeypotter.statemachine import Machine, Transition
 class NegotiationAction(Enum):
     SEND_ENABLE = auto()
     SEND_DISABLE = auto()
+
+
+@dataclass(kw_only=True)
+class NegotiationResult:
+    action: NegotiationAction | None
+    option_changed: bool
 
 
 class QState(Enum):
@@ -90,8 +97,12 @@ class QMethod:
     def state(self) -> QState:
         return self._machine.state
 
-    def handle_input(self, option_input: QInput) -> NegotiationAction | None:
-        return self._machine.trigger(option_input)
+    def handle_input(self, option_input: QInput) -> NegotiationResult:
+        was_enabled = self.state is QState.YES
+        action = self._machine.trigger(option_input)
+        is_enabled = self.state is QState.YES
+
+        return NegotiationResult(action=action, option_changed=was_enabled != is_enabled)
 
     def send_enable(self) -> NegotiationAction:
         return NegotiationAction.SEND_ENABLE
@@ -107,7 +118,7 @@ class OptionNegotiator:
     def is_enabled(self, option: int) -> bool:
         return self._options[option].state is QState.YES
 
-    def request_enable(self, option: int) -> NegotiationAction | None:
+    def request_enable(self, option: int) -> NegotiationResult:
         return self._options[option].handle_input(QInput.REQUEST_ENABLE)
 
     def request_disable(self, option: int) -> NegotiationAction | None:
