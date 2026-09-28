@@ -37,6 +37,7 @@ class NegotiationVerb(IntEnum):
     DONT = 254
 
 
+# TODO: Delete
 @dataclass(frozen=True, kw_only=True)
 class ApplicationData:
     data: bytes
@@ -53,6 +54,7 @@ class ApplicationData:
         return bytes(encoded)
 
 
+# TODO: Delete
 @dataclass(frozen=True, kw_only=True)
 class Command:
     code: CommandCode
@@ -61,6 +63,7 @@ class Command:
         return b"\xff" + self.code.to_bytes()
 
 
+# TODO: Delete
 @dataclass(frozen=True, kw_only=True)
 class Negotiation:
     verb: NegotiationVerb
@@ -70,6 +73,7 @@ class Negotiation:
         return b"\xff" + self.verb.to_bytes() + self.option.to_bytes()
 
 
+# TODO: Delete
 @dataclass(frozen=True, kw_only=True)
 class Subnegotiation:
     option: NegotiationOption
