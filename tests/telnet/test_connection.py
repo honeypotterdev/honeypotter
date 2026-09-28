@@ -191,7 +191,7 @@ class TestTelnetConnection:
             SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"")
         ]
 
-    @pytest.mark.parametrize("split", list(range(4)))
+    @pytest.mark.parametrize("split", list(range(1, 9)))
     def test_receive_data_subnegotiation_fragmented(self, connection: TelnetConnection, split: int) -> None:
         peer_connection = TelnetConnection()
         peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"\x00\x64\x00\x32")
