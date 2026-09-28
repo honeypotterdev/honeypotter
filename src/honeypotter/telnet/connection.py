@@ -1,6 +1,7 @@
 from enum import Enum, auto
 from typing import Any
 
+from honeypotter.constants import CR, LF
 from honeypotter.statemachine import Machine, MachineError, Transition
 from honeypotter.telnet.events import (
     ApplicationDataReceived,
@@ -106,7 +107,19 @@ class TelnetConnection:
         return data
 
     def send_application_data(self, data: bytes) -> None:
-        self._data_to_send_buffer.extend(data.replace(b"\xff", b"\xff\xff"))
+        encoded_data = bytearray()
+
+        for byte in data:
+            if byte == 255:
+                encoded_data.extend(b"\xff\xff")
+            elif byte == LF:
+                encoded_data.extend(b"\r\n")
+            elif byte == CR:
+                encoded_data.extend(b"\r\x00")
+            else:
+                encoded_data.append(byte)
+
+        self._data_to_send_buffer.extend(encoded_data)
 
     def send_command(self, code: int) -> None:
         self._data_to_send_buffer.extend(b"\xff" + code.to_bytes())

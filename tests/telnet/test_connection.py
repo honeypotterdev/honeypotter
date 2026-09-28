@@ -2,6 +2,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from honeypotter.constants import CR, LF
 from honeypotter.telnet.connection import TelnetConnection
 from honeypotter.telnet.events import (
     ApplicationDataReceived,
@@ -23,17 +24,37 @@ class TestTelnetConnection:
         assert connection.data_to_send() == b"foo"
         assert connection.data_to_send() == b""
 
-    @given(data=st.lists(st.integers(min_value=0, max_value=254)).map(bytes))
+    @given(data=st.lists(st.integers(min_value=0, max_value=254).filter(lambda i: i not in {LF, CR})).map(bytes))
     def test_send_application_data(self, data: bytes) -> None:
         connection = TelnetConnection()
         connection.send_application_data(data)
 
         assert connection.data_to_send() == data
 
-    def test_send_application_data_double_iac(self, connection: TelnetConnection) -> None:
+    def test_send_application_data_iac_escape(self, connection: TelnetConnection) -> None:
         connection.send_application_data(b"\xff")
 
         assert connection.data_to_send() == b"\xff\xff"
+
+    @pytest.mark.parametrize(
+        "application_data,data_to_send",
+        [
+            (b"hello", b"hello"),
+            (b"hello\n", b"hello\r\n"),
+            (b"\n\n", b"\r\n\r\n"),
+            (b"hello\nworld", b"hello\r\nworld"),
+            (b"hello\r", b"hello\r\x00"),
+            (b"\r\r", b"\r\x00\r\x00"),
+            (b"hello\rworld", b"hello\r\x00world"),
+            (b"\r\n", b"\r\x00\r\n"),
+        ],
+    )
+    def test_send_application_data_nvt_encode(
+        self, connection: TelnetConnection, application_data: bytes, data_to_send: bytes
+    ) -> None:
+        connection.send_application_data(application_data)
+
+        assert connection.data_to_send() == data_to_send
 
     def test_send_command(self, connection: TelnetConnection) -> None:
         connection.send_command(CommandCode.AYT)
