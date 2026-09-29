@@ -123,10 +123,10 @@ class OptionNegotiator:
 
         return self._options[option].handle_input(q_input)
 
-    def receive_enable(self, option: int, *, allowed: bool) -> NegotiationAction | None:
-        return self._options[option].handle_input(
-            QInput.RECEIVE_ENABLE_ALLOWED if allowed else QInput.RECEIVE_ENABLE_DISALLOWED
-        )
+    def receive(self, option: int, *, enable: bool, allowed: bool) -> NegotiationResult:
+        if enable:
+            q_input = QInput.RECEIVE_ENABLE_ALLOWED if allowed else QInput.RECEIVE_ENABLE_DISALLOWED
+        else:
+            q_input = QInput.RECEIVE_DISABLE
 
-    def receive_disable(self, option: int) -> NegotiationAction | None:
-        return self._options[option].handle_input(QInput.RECEIVE_DISABLE)
+        return self._options[option].handle_input(q_input)
