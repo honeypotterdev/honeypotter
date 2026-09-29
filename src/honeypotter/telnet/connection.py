@@ -105,12 +105,9 @@ class TelnetConnection:
     def request_option(self, option: NegotiationOption, *, side: Side, enable: bool) -> None:
         options = self._local_options if side == Side.LOCAL else self._remote_options
 
-        if enable:
-            action = options.request_enable(option)
-        else:
-            action = options.request_disable(option)
+        result = options.request(option, enable=enable)
 
-        if action is None:
+        if result.action is None:
             return
 
         mapping = {

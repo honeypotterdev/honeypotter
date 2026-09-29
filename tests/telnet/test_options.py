@@ -19,20 +19,20 @@ class TestOptionNegotiator:
     def test_request_enable_sends_enable_once(self) -> None:
         negotiator = OptionNegotiator()
 
-        assert negotiator.request_enable(1) == NegotiationResult(
+        assert negotiator.request(1, enable=True) == NegotiationResult(
             action=NegotiationAction.SEND_ENABLE, option_changed=False
         )
-        assert negotiator.request_enable(1) == NegotiationResult(action=None, option_changed=False)
+        assert negotiator.request(1, enable=True) == NegotiationResult(action=None, option_changed=False)
         assert negotiator.is_enabled(1) is False
 
     def test_request_disable_sends_disable_once(self) -> None:
         negotiator = OptionNegotiator()
         self._enable(negotiator, 1)
 
-        assert negotiator.request_disable(1) == NegotiationResult(
+        assert negotiator.request(1, enable=False) == NegotiationResult(
             action=NegotiationAction.SEND_DISABLE, option_changed=True
         )
-        assert negotiator.request_disable(1) == NegotiationResult(action=None, option_changed=False)
+        assert negotiator.request(1, enable=False) == NegotiationResult(action=None, option_changed=False)
         assert negotiator.is_enabled(1) is False
 
     # TODO: Port tests from legacy

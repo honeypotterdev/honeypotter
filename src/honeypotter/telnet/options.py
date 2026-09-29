@@ -42,19 +42,19 @@ class QMethod:
             transitions=[
                 # NO
                 Transition(
-                    source=QState.NO, event=QInput.REQUEST_ENABLE, target=QState.WANTYES_EMPTY, action="send_enable"
+                    source=QState.NO, event=QInput.REQUEST_ENABLE, target=QState.WANTYES_EMPTY, action="_send_enable"
                 ),
                 Transition(
-                    source=QState.NO, event=QInput.RECEIVE_ENABLE_ALLOWED, target=QState.YES, action="send_enable"
+                    source=QState.NO, event=QInput.RECEIVE_ENABLE_ALLOWED, target=QState.YES, action="_send_enable"
                 ),
                 Transition(
-                    source=QState.NO, event=QInput.RECEIVE_ENABLE_DISALLOWED, target=QState.NO, action="send_disable"
+                    source=QState.NO, event=QInput.RECEIVE_ENABLE_DISALLOWED, target=QState.NO, action="_send_disable"
                 ),
                 # YES
                 Transition(
-                    source=QState.YES, event=QInput.REQUEST_DISABLE, target=QState.WANTNO_EMPTY, action="send_disable"
+                    source=QState.YES, event=QInput.REQUEST_DISABLE, target=QState.WANTNO_EMPTY, action="_send_disable"
                 ),
-                Transition(source=QState.YES, event=QInput.RECEIVE_DISABLE, target=QState.NO, action="send_disable"),
+                Transition(source=QState.YES, event=QInput.RECEIVE_DISABLE, target=QState.NO, action="_send_disable"),
                 # WANTNO_EMPTY
                 Transition(source=QState.WANTNO_EMPTY, event=QInput.REQUEST_ENABLE, target=QState.WANTNO_OPPOSITE),
                 Transition(source=QState.WANTNO_EMPTY, event=QInput.RECEIVE_ENABLE_ALLOWED, target=QState.NO),
@@ -68,7 +68,7 @@ class QMethod:
                     source=QState.WANTNO_OPPOSITE,
                     event=QInput.RECEIVE_DISABLE,
                     target=QState.WANTYES_EMPTY,
-                    action="send_enable",
+                    action="_send_enable",
                 ),
                 # WANTYES_EMPTY
                 Transition(source=QState.WANTYES_EMPTY, event=QInput.REQUEST_DISABLE, target=QState.WANTYES_OPPOSITE),
@@ -81,33 +81,33 @@ class QMethod:
                     source=QState.WANTYES_OPPOSITE,
                     event=QInput.RECEIVE_ENABLE_ALLOWED,
                     target=QState.WANTNO_EMPTY,
-                    action="send_disable",
+                    action="_send_disable",
                 ),
                 Transition(
                     source=QState.WANTYES_OPPOSITE,
                     event=QInput.RECEIVE_ENABLE_DISALLOWED,
                     target=QState.WANTNO_EMPTY,
-                    action="send_disable",
+                    action="_send_disable",
                 ),
                 Transition(source=QState.WANTYES_OPPOSITE, event=QInput.RECEIVE_DISABLE, target=QState.NO),
             ],
         )
 
     @property
-    def state(self) -> QState:
-        return self._machine.state
+    def is_enabled(self) -> bool:
+        return self._machine.state is QState.YES
 
     def handle_input(self, option_input: QInput) -> NegotiationResult:
-        was_enabled = self.state is QState.YES
+        was_enabled = self.is_enabled
         action = self._machine.trigger(option_input)
-        is_enabled = self.state is QState.YES
+        is_enabled = self.is_enabled
 
         return NegotiationResult(action=action, option_changed=was_enabled != is_enabled)
 
-    def send_enable(self) -> NegotiationAction:
+    def _send_enable(self) -> NegotiationAction:
         return NegotiationAction.SEND_ENABLE
 
-    def send_disable(self) -> NegotiationAction:
+    def _send_disable(self) -> NegotiationAction:
         return NegotiationAction.SEND_DISABLE
 
 
@@ -116,13 +116,12 @@ class OptionNegotiator:
         self._options: dict[int, QMethod] = defaultdict[int, QMethod](lambda: QMethod())
 
     def is_enabled(self, option: int) -> bool:
-        return self._options[option].state is QState.YES
+        return self._options[option].is_enabled
 
-    def request_enable(self, option: int) -> NegotiationResult:
-        return self._options[option].handle_input(QInput.REQUEST_ENABLE)
+    def request(self, option: int, *, enable: bool) -> NegotiationResult:
+        q_input = QInput.REQUEST_ENABLE if enable else QInput.REQUEST_DISABLE
 
-    def request_disable(self, option: int) -> NegotiationAction | None:
-        return self._options[option].handle_input(QInput.REQUEST_DISABLE)
+        return self._options[option].handle_input(q_input)
 
     def receive_enable(self, option: int, *, allowed: bool) -> NegotiationAction | None:
         return self._options[option].handle_input(
