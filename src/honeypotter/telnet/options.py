@@ -5,14 +5,14 @@ from enum import Enum, auto
 from honeypotter.statemachine import Machine, Transition
 
 
-class NegotiationAction(Enum):
+class Action(Enum):
     SEND_ENABLE = auto()
     SEND_DISABLE = auto()
 
 
 @dataclass(kw_only=True)
-class NegotiationResult:
-    action: NegotiationAction | None
+class Result:
+    action: Action | None
     option_changed: bool
 
 
@@ -97,18 +97,18 @@ class QMethod:
     def is_enabled(self) -> bool:
         return self._machine.state is QState.YES
 
-    def handle_input(self, option_input: QInput) -> NegotiationResult:
+    def handle_input(self, option_input: QInput) -> Result:
         was_enabled = self.is_enabled
         action = self._machine.trigger(option_input)
         is_enabled = self.is_enabled
 
-        return NegotiationResult(action=action, option_changed=was_enabled != is_enabled)
+        return Result(action=action, option_changed=was_enabled != is_enabled)
 
-    def _send_enable(self) -> NegotiationAction:
-        return NegotiationAction.SEND_ENABLE
+    def _send_enable(self) -> Action:
+        return Action.SEND_ENABLE
 
-    def _send_disable(self) -> NegotiationAction:
-        return NegotiationAction.SEND_DISABLE
+    def _send_disable(self) -> Action:
+        return Action.SEND_DISABLE
 
 
 class OptionNegotiator:
@@ -118,12 +118,12 @@ class OptionNegotiator:
     def is_enabled(self, option: int) -> bool:
         return self._options[option].is_enabled
 
-    def request(self, option: int, *, enable: bool) -> NegotiationResult:
+    def request(self, option: int, *, enable: bool) -> Result:
         q_input = QInput.REQUEST_ENABLE if enable else QInput.REQUEST_DISABLE
 
         return self._options[option].handle_input(q_input)
 
-    def receive(self, option: int, *, enable: bool, allowed: bool) -> NegotiationResult:
+    def receive(self, option: int, *, enable: bool, allowed: bool) -> Result:
         if enable:
             q_input = QInput.RECEIVE_ENABLE_ALLOWED if allowed else QInput.RECEIVE_ENABLE_DISALLOWED
         else:
