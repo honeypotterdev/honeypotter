@@ -6,11 +6,11 @@ from honeypotter.telnet.options import NegotiationAction, NegotiationResult, Opt
 class TestOptionNegotiator:
     @pytest.fixture
     def negotiator(self) -> OptionNegotiator:
-        return OptionNegotiator()
+        return OptionNegotiator(allowed_options=[1])
 
     @pytest.fixture
     def enabled_negotiator(self, negotiator: OptionNegotiator) -> OptionNegotiator:
-        negotiator.receive(1, enable=True, allowed=True)
+        negotiator.receive(1, enable=True)
 
         return negotiator
 
@@ -18,7 +18,7 @@ class TestOptionNegotiator:
         assert negotiator.is_enabled(1) is False
 
     def test_is_enabled_tracks_options_independently(self, negotiator: OptionNegotiator) -> None:
-        negotiator.receive(1, enable=True, allowed=True)
+        negotiator.receive(1, enable=True)
 
         assert negotiator.is_enabled(1) is True
         assert negotiator.is_enabled(2) is False
@@ -49,38 +49,32 @@ class TestOptionNegotiator:
         assert negotiator.request(1, enable=True) == NegotiationResult(
             action=NegotiationAction.SEND_ENABLE, enabled_changed=False
         )
-        assert negotiator.receive(1, enable=True, allowed=True) == NegotiationResult(action=None, enabled_changed=True)
+        assert negotiator.receive(1, enable=True) == NegotiationResult(action=None, enabled_changed=True)
         assert negotiator.is_enabled(1) is True
 
     def test_peer_accepts_pending_disable(self, enabled_negotiator: OptionNegotiator) -> None:
         assert enabled_negotiator.request(1, enable=False) == NegotiationResult(
             action=NegotiationAction.SEND_DISABLE, enabled_changed=True
         )
-        assert enabled_negotiator.receive(1, enable=False, allowed=True) == NegotiationResult(
-            action=None, enabled_changed=False
-        )
+        assert enabled_negotiator.receive(1, enable=False) == NegotiationResult(action=None, enabled_changed=False)
         assert enabled_negotiator.is_enabled(1) is False
 
     def test_peer_rejects_pending_enable(self, negotiator: OptionNegotiator) -> None:
         assert negotiator.request(1, enable=True) == NegotiationResult(
             action=NegotiationAction.SEND_ENABLE, enabled_changed=False
         )
-        assert negotiator.receive(1, enable=False, allowed=True) == NegotiationResult(
-            action=None, enabled_changed=False
-        )
+        assert negotiator.receive(1, enable=False) == NegotiationResult(action=None, enabled_changed=False)
         assert negotiator.is_enabled(1) is False
 
     def test_peer_rejects_pending_disable(self, enabled_negotiator: OptionNegotiator) -> None:
         assert enabled_negotiator.request(1, enable=False) == NegotiationResult(
             action=NegotiationAction.SEND_DISABLE, enabled_changed=True
         )
-        assert enabled_negotiator.receive(1, enable=True, allowed=True) == NegotiationResult(
-            action=None, enabled_changed=False
-        )
+        assert enabled_negotiator.receive(1, enable=True) == NegotiationResult(action=None, enabled_changed=False)
         assert enabled_negotiator.is_enabled(1) is False
 
     def test_unsolicited_enable_accepted(self, negotiator: OptionNegotiator) -> None:
-        assert negotiator.receive(1, enable=True, allowed=True) == NegotiationResult(
+        assert negotiator.receive(1, enable=True) == NegotiationResult(
             action=NegotiationAction.SEND_ENABLE, enabled_changed=True
         )
         assert negotiator.is_enabled(1) is True

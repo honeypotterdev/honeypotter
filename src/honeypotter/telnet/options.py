@@ -1,4 +1,5 @@
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -127,7 +128,8 @@ class QNegotiation:
 
 
 class OptionNegotiator:
-    def __init__(self) -> None:
+    def __init__(self, allowed_options: Iterable[int] | None = None) -> None:
+        self._allowed_options = frozenset(allowed_options or ())
         self._negotiations: dict[int, QNegotiation] = defaultdict[int, QNegotiation](lambda: QNegotiation())
 
     def is_enabled(self, option: int) -> bool:
@@ -138,10 +140,11 @@ class OptionNegotiator:
 
         return self._negotiations[option].send_input(q_input)
 
-    def receive(self, option: int, *, enable: bool, allowed: bool) -> NegotiationResult:
-        if enable:
-            q_input = QInput.RECEIVE_ENABLE_ALLOWED if allowed else QInput.RECEIVE_ENABLE_DISALLOWED
-        else:
-            q_input = QInput.RECEIVE_DISABLE
+    def receive(self, option: int, *, enable: bool) -> NegotiationResult:
+        if not enable:
+            return self._negotiations[option].send_input(QInput.RECEIVE_DISABLE)
 
-        return self._negotiations[option].send_input(q_input)
+        if option in self._allowed_options:
+            return self._negotiations[option].send_input(QInput.RECEIVE_ENABLE_ALLOWED)
+
+        return self._negotiations[option].send_input(QInput.RECEIVE_ENABLE_DISALLOWED)
