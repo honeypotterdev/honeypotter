@@ -8,6 +8,7 @@ from honeypotter.telnet.events import (
     ApplicationDataReceived,
     CommandReceived,
     NegotiationReceived,
+    OptionStateChanged,
     SubnegotiationReceived,
 )
 from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb, Side
@@ -216,6 +217,9 @@ class TestTelnetConnection:
 
         assert connection.receive_data(response) == [
             NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO),
+            OptionStateChanged(option=NegotiationOption.ECHO, side=Side.LOCAL, enabled=True),
             NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.SGA),
+            OptionStateChanged(option=NegotiationOption.SGA, side=Side.LOCAL, enabled=True),
             NegotiationReceived(verb=NegotiationVerb.WILL, option=NegotiationOption.SGA),
+            OptionStateChanged(option=NegotiationOption.SGA, side=Side.REMOTE, enabled=True),
         ]

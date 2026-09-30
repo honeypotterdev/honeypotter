@@ -1,6 +1,7 @@
+from collections.abc import Iterable
 from enum import Enum, auto
 from functools import partial
-from typing import Any
+from typing import Any, ClassVar
 
 from honeypotter.constants import CR, LF, NUL
 from honeypotter.statemachine import Machine, MachineError, Transition
@@ -11,6 +12,7 @@ from honeypotter.telnet.events import (
     ConnectionFailed,
     Event,
     NegotiationReceived,
+    OptionStateChanged,
     SubnegotiationReceived,
 )
 from honeypotter.telnet.options import OptionNegotiator
@@ -28,15 +30,26 @@ class State(Enum):
 
 
 class TelnetConnection:
+    _SEND_VERBS: ClassVar[dict[tuple[Side, bool], NegotiationVerb]] = {
+        (Side.LOCAL, True): NegotiationVerb.WILL,
+        (Side.LOCAL, False): NegotiationVerb.WONT,
+        (Side.REMOTE, True): NegotiationVerb.DO,
+        (Side.REMOTE, False): NegotiationVerb.DONT,
+    }
+    _RECEIVED_VERBS: ClassVar[dict[NegotiationVerb, tuple[Side, bool]]] = {
+        NegotiationVerb.DO: (Side.LOCAL, True),
+        NegotiationVerb.DONT: (Side.LOCAL, False),
+        NegotiationVerb.WILL: (Side.REMOTE, True),
+        NegotiationVerb.WONT: (Side.REMOTE, False),
+    }
+
     def __init__(
-        self,
-        allowed_local_options: set[NegotiationOption] | None = None,
-        allowed_remote_options: set[NegotiationOption] | None = None,
+        self, allowed_local_options: Iterable[int] | None = None, allowed_remote_options: Iterable[int] | None = None
     ) -> None:
-        self._allowed_local_options = allowed_local_options or set()
-        self._allowed_remote_options = allowed_remote_options or set()
-        self._local_options = OptionNegotiator()
-        self._remote_options = OptionNegotiator()
+        self._options = {
+            Side.LOCAL: OptionNegotiator(allowed_local_options),
+            Side.REMOTE: OptionNegotiator(allowed_remote_options),
+        }
 
         self._data_to_send_buffer = bytearray()
         self._app_buffer = bytearray()
@@ -92,8 +105,7 @@ class TelnetConnection:
                 self._event_buffer.append(event)
 
                 if isinstance(event, NegotiationReceived):
-                    # TODO: Update options, fire OptionStateChanged
-                    pass
+                    self._handle_negotiation(event)
 
         self._flush_app_buffer()
 
@@ -103,28 +115,17 @@ class TelnetConnection:
         return events
 
     def request_option(self, option: NegotiationOption, *, side: Side, enable: bool) -> None:
-        options = self._local_options if side == Side.LOCAL else self._remote_options
-
-        result = options.request(option, enable=enable)
+        result = self._options[side].request(option, enable=enable)
 
         if result.action is None:
             return
 
-        mapping = {
-            (Side.LOCAL, True): NegotiationVerb.WILL,
-            (Side.LOCAL, False): NegotiationVerb.WONT,
-            (Side.REMOTE, True): NegotiationVerb.DO,
-            (Side.REMOTE, False): NegotiationVerb.DONT,
-        }
-
-        verb = mapping[(side, enable)]
+        verb = self._SEND_VERBS[(side, enable)]
 
         self.send_negotiation(verb=verb, option=option)
 
     def is_option_enabled(self, option: NegotiationOption, *, side: Side) -> bool:
-        options = self._local_options if side == Side.LOCAL else self._remote_options
-
-        return options.is_enabled(option)
+        return self._options[side].is_enabled(option)
 
     def _encode_application_data(self, data: bytes) -> bytes:
         encoded_data = bytearray()
@@ -140,6 +141,19 @@ class TelnetConnection:
                 encoded_data.append(byte)
 
         return bytes(encoded_data)
+
+    def _handle_negotiation(self, event: NegotiationReceived) -> None:
+        side, enable = self._RECEIVED_VERBS[event.verb]
+        result = self._options[side].receive(event.option, enable=enable)
+
+        # send ack
+        if result.action is not None:
+            verb = self._SEND_VERBS[(side, enable)]
+            self.send_negotiation(verb, event.option)
+
+        if result.enabled_changed:
+            enabled = self._options[side].is_enabled(event.option)
+            self._event_buffer.append(OptionStateChanged(option=event.option, side=side, enabled=enabled))
 
     def _create_machine(self) -> Machine[State, str]:
         t = partial(Transition, "byte")
