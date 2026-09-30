@@ -11,7 +11,7 @@ from honeypotter.redis.exporters import RedisConnectionExporter
 from honeypotter.redis.handlers import RedisHandler
 from honeypotter.shell.handlers import BusyboxShellHandler
 from honeypotter.telnet.exporters import TelnetConnectionExporter
-from honeypotter.telnet.legacy import TelnetCodecHandler, TelnetSessionHandler
+from honeypotter.telnet.handlers import TelnetHandler
 from honeypotter.transport import TransportProtocolFactory
 
 _logger = logging.getLogger(__name__)
@@ -44,8 +44,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
         ip_rate_limiter.handler_factory,
         InboundIdleTimeoutHandler,
         MessageLoggingHandler,
-        TelnetCodecHandler,
-        TelnetSessionHandler,
+        TelnetHandler,
         LineDecoderHandler,
         BusyboxShellHandler,
     ]

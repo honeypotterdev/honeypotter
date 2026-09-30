@@ -23,7 +23,7 @@ class CommandCode(DynamicIntEnum):
     EL = 248  # Erase Line
 
 
-class NegotiationOption(DynamicIntEnum):
+class Option(DynamicIntEnum):
     ECHO = 1
     SGA = 3
     NAWS = 31

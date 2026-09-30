@@ -16,7 +16,7 @@ from honeypotter.telnet.events import (
     SubnegotiationReceived,
 )
 from honeypotter.telnet.options import NegotiationAction, OptionNegotiator
-from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb, Side
+from honeypotter.telnet.types import CommandCode, NegotiationVerb, Option, Side
 
 
 class State(Enum):
@@ -100,7 +100,7 @@ class TelnetConnection:
 
         return self._drain_events()
 
-    def request_option(self, option: NegotiationOption, *, side: Side, enable: bool) -> None:
+    def request_option(self, option: Option, *, side: Side, enable: bool) -> None:
         result = self._option_negotiators[side].request(option, enable=enable)
 
         if result.action is None:
@@ -109,7 +109,7 @@ class TelnetConnection:
         verb = self._REQUEST_TO_VERB[(side, enable)]
         self._send_negotiation(verb=verb, option=option)
 
-    def is_option_enabled(self, option: NegotiationOption, *, side: Side) -> bool:
+    def is_option_enabled(self, option: Option, *, side: Side) -> bool:
         return self._option_negotiators[side].is_enabled(option)
 
     def _drain_events(self) -> list[Event]:
@@ -148,7 +148,7 @@ class TelnetConnection:
                 OptionStateChanged(option=event.option, side=side, enabled=negotiator.is_enabled(event.option))
             )
 
-    def _send_negotiation(self, verb: int, option: NegotiationOption) -> None:
+    def _send_negotiation(self, verb: int, option: Option) -> None:
         self._outgoing_buffer.extend(IAC.to_bytes() + verb.to_bytes() + option.to_bytes())
 
     def _send_subnegotiation(self, option: int, data: bytes) -> None:
@@ -263,16 +263,14 @@ class TelnetConnection:
         return CommandReceived(code=CommandCode(byte))
 
     def _finalize_negotiation(self, byte: int) -> NegotiationReceived:
-        negotiation = NegotiationReceived(
-            verb=NegotiationVerb(self._pending_negotiation_verb), option=NegotiationOption(byte)
-        )
+        negotiation = NegotiationReceived(verb=NegotiationVerb(self._pending_negotiation_verb), option=Option(byte))
         self._pending_negotiation_verb = 0
 
         return negotiation
 
     def _finalize_subnegotiation(self, byte: int) -> SubnegotiationReceived:
         subnegotiation = SubnegotiationReceived(
-            option=NegotiationOption(self._pending_subnegotiation_option), data=bytes(self._subnegotiation_buffer)
+            option=Option(self._pending_subnegotiation_option), data=bytes(self._subnegotiation_buffer)
         )
         self._pending_subnegotiation_option = 0
         self._subnegotiation_buffer.clear()

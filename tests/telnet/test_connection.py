@@ -11,7 +11,7 @@ from honeypotter.telnet.events import (
     OptionStateChanged,
     SubnegotiationReceived,
 )
-from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb, Side
+from honeypotter.telnet.types import CommandCode, NegotiationVerb, Option, Side
 
 
 class TestTelnetConnection:
@@ -121,14 +121,14 @@ class TestTelnetConnection:
     def test_receive_data_application_data_before_negotiation(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo\xff\xfd\x01bar") == [
             ApplicationDataReceived(data=b"foo"),
-            NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO),
+            NegotiationReceived(verb=NegotiationVerb.DO, option=Option.ECHO),
             ApplicationDataReceived(data=b"bar"),
         ]
 
     def test_receive_data_application_data_before_subnegotiation(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo\xff\xfa\x1f\x00d\x002\xff\xf0bar") == [
             ApplicationDataReceived(data=b"foo"),
-            SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32"),
+            SubnegotiationReceived(option=Option.NAWS, data=b"\x00\x64\x00\x32"),
             ApplicationDataReceived(data=b"bar"),
         ]
 
@@ -137,17 +137,17 @@ class TestTelnetConnection:
 
     def test_receive_data_negotiation(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"\xff\xfd\x01") == [
-            NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO)
+            NegotiationReceived(verb=NegotiationVerb.DO, option=Option.ECHO)
         ]
 
     def test_receive_data_subnegotiation(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"\xff\xfa\x1f\x00d\x002\xff\xf0") == [
-            SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
+            SubnegotiationReceived(option=Option.NAWS, data=b"\x00\x64\x00\x32")
         ]
 
     def test_receive_data_subnegotiation_empty_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"\xff\xfa\x1f\xff\xf0") == [
-            SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"")
+            SubnegotiationReceived(option=Option.NAWS, data=b"")
         ]
 
     @pytest.mark.parametrize("split", list(range(1, 9)))
@@ -156,28 +156,28 @@ class TestTelnetConnection:
 
         assert connection.receive_data(data[:split]) == []
         assert connection.receive_data(data[split:]) == [
-            SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
+            SubnegotiationReceived(option=Option.NAWS, data=b"\x00\x64\x00\x32")
         ]
 
     def test_request_option(self, connection: TelnetConnection) -> None:
-        connection.request_option(NegotiationOption.ECHO, side=Side.LOCAL, enable=True)
-        connection.request_option(NegotiationOption.SGA, side=Side.LOCAL, enable=True)
-        connection.request_option(NegotiationOption.SGA, side=Side.REMOTE, enable=True)
+        connection.request_option(Option.ECHO, side=Side.LOCAL, enable=True)
+        connection.request_option(Option.SGA, side=Side.LOCAL, enable=True)
+        connection.request_option(Option.SGA, side=Side.REMOTE, enable=True)
 
         assert connection.data_to_send() == b"\xff\xfb\x01\xff\xfb\x03\xff\xfd\x03"
-        assert connection.is_option_enabled(NegotiationOption.ECHO, side=Side.LOCAL) is False
-        assert connection.is_option_enabled(NegotiationOption.SGA, side=Side.LOCAL) is False
-        assert connection.is_option_enabled(NegotiationOption.SGA, side=Side.REMOTE) is False
+        assert connection.is_option_enabled(Option.ECHO, side=Side.LOCAL) is False
+        assert connection.is_option_enabled(Option.SGA, side=Side.LOCAL) is False
+        assert connection.is_option_enabled(Option.SGA, side=Side.REMOTE) is False
 
         response = b"\xff\xfd\x01\xff\xfd\x03\xff\xfb\x03"  # DO ECHO, DO SGA, WILL SGA
 
         assert connection.receive_data(response) == [
-            NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO),
-            OptionStateChanged(option=NegotiationOption.ECHO, side=Side.LOCAL, enabled=True),
-            NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.SGA),
-            OptionStateChanged(option=NegotiationOption.SGA, side=Side.LOCAL, enabled=True),
-            NegotiationReceived(verb=NegotiationVerb.WILL, option=NegotiationOption.SGA),
-            OptionStateChanged(option=NegotiationOption.SGA, side=Side.REMOTE, enabled=True),
+            NegotiationReceived(verb=NegotiationVerb.DO, option=Option.ECHO),
+            OptionStateChanged(option=Option.ECHO, side=Side.LOCAL, enabled=True),
+            NegotiationReceived(verb=NegotiationVerb.DO, option=Option.SGA),
+            OptionStateChanged(option=Option.SGA, side=Side.LOCAL, enabled=True),
+            NegotiationReceived(verb=NegotiationVerb.WILL, option=Option.SGA),
+            OptionStateChanged(option=Option.SGA, side=Side.REMOTE, enabled=True),
         ]
         assert connection.data_to_send() == b""
 
