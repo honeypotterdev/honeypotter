@@ -29,13 +29,13 @@ class State(Enum):
 
 
 class TelnetConnection:
-    _SEND_VERBS: ClassVar[dict[tuple[Side, bool], NegotiationVerb]] = {
+    _REQUEST_TO_VERB: ClassVar[dict[tuple[Side, bool], NegotiationVerb]] = {
         (Side.LOCAL, True): NegotiationVerb.WILL,
         (Side.LOCAL, False): NegotiationVerb.WONT,
         (Side.REMOTE, True): NegotiationVerb.DO,
         (Side.REMOTE, False): NegotiationVerb.DONT,
     }
-    _RECEIVED_VERBS: ClassVar[dict[NegotiationVerb, tuple[Side, bool]]] = {
+    _VERB_TO_REQUEST: ClassVar[dict[NegotiationVerb, tuple[Side, bool]]] = {
         NegotiationVerb.DO: (Side.LOCAL, True),
         NegotiationVerb.DONT: (Side.LOCAL, False),
         NegotiationVerb.WILL: (Side.REMOTE, True),
@@ -45,7 +45,7 @@ class TelnetConnection:
     def __init__(
         self, allowed_local_options: Iterable[int] | None = None, allowed_remote_options: Iterable[int] | None = None
     ) -> None:
-        self._options = {
+        self._option_negotiators = {
             Side.LOCAL: OptionNegotiator(allowed_local_options),
             Side.REMOTE: OptionNegotiator(allowed_remote_options),
         }
@@ -100,34 +100,23 @@ class TelnetConnection:
 
         return self._drain_events()
 
+    def request_option(self, option: NegotiationOption, *, side: Side, enable: bool) -> None:
+        result = self._option_negotiators[side].request(option, enable=enable)
+
+        if result.action is None:
+            return
+
+        verb = self._REQUEST_TO_VERB[(side, enable)]
+        self._send_negotiation(verb=verb, option=option)
+
+    def is_option_enabled(self, option: NegotiationOption, *, side: Side) -> bool:
+        return self._option_negotiators[side].is_enabled(option)
+
     def _drain_events(self) -> list[Event]:
         events = self._pending_events
         self._pending_events = []
 
         return events
-
-    def request_option(self, option: NegotiationOption, *, side: Side, enable: bool) -> None:
-        result = self._options[side].request(option, enable=enable)
-
-        if result.action is None:
-            return
-
-        verb = self._SEND_VERBS[(side, enable)]
-
-        self._send_negotiation(verb=verb, option=option)
-
-    def is_option_enabled(self, option: NegotiationOption, *, side: Side) -> bool:
-        return self._options[side].is_enabled(option)
-
-    def _send_negotiation(self, verb: int, option: NegotiationOption) -> None:
-        self._outgoing_buffer.extend(IAC.to_bytes() + verb.to_bytes() + option.to_bytes())
-
-    def _send_subnegotiation(self, option: int, data: bytes) -> None:
-        data = data.replace(b"\xff", b"\xff\xff")
-
-        self._outgoing_buffer.extend(
-            IAC.to_bytes() + SB.to_bytes() + option.to_bytes() + data + IAC.to_bytes() + SE.to_bytes()
-        )
 
     def _encode_application_data(self, data: bytes) -> bytes:
         encoded_data = bytearray()
@@ -145,17 +134,29 @@ class TelnetConnection:
         return bytes(encoded_data)
 
     def _handle_negotiation(self, event: NegotiationReceived) -> None:
-        side, enable = self._RECEIVED_VERBS[event.verb]
-        result = self._options[side].receive(event.option, enable=enable)
+        side, peer_requests_enable = self._VERB_TO_REQUEST[event.verb]
+        negotiator = self._option_negotiators[side]
+        result = negotiator.receive(event.option, enable=peer_requests_enable)
 
         # send negotiation response
         if result.action is not None:
-            verb = self._SEND_VERBS[(side, result.action is NegotiationAction.SEND_ENABLE)]
+            verb = self._REQUEST_TO_VERB[(side, result.action is NegotiationAction.SEND_ENABLE)]
             self._send_negotiation(verb, event.option)
 
         if result.enabled_changed:
-            enabled = self._options[side].is_enabled(event.option)
-            self._pending_events.append(OptionStateChanged(option=event.option, side=side, enabled=enabled))
+            self._pending_events.append(
+                OptionStateChanged(option=event.option, side=side, enabled=negotiator.is_enabled(event.option))
+            )
+
+    def _send_negotiation(self, verb: int, option: NegotiationOption) -> None:
+        self._outgoing_buffer.extend(IAC.to_bytes() + verb.to_bytes() + option.to_bytes())
+
+    def _send_subnegotiation(self, option: int, data: bytes) -> None:
+        data = data.replace(b"\xff", b"\xff\xff")
+
+        self._outgoing_buffer.extend(
+            IAC.to_bytes() + SB.to_bytes() + option.to_bytes() + data + IAC.to_bytes() + SE.to_bytes()
+        )
 
     def _create_parser_machine(self) -> Machine[State, str]:
         on_byte = partial(Transition, "byte")
