@@ -62,21 +62,6 @@ class TestTelnetConnection:
 
         assert connection.data_to_send() == b"\xff\xf6"
 
-    def test_send_negotiation(self, connection: TelnetConnection) -> None:
-        connection.send_negotiation(NegotiationVerb.WILL, NegotiationOption.ECHO)
-
-        assert connection.data_to_send() == b"\xff\xfb\x01"
-
-    def test_send_subnegotiation(self, connection: TelnetConnection) -> None:
-        connection.send_subnegotiation(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
-
-        assert connection.data_to_send() == b"\xff\xfa\x1f\x00\x64\x00\x32\xff\xf0"
-
-    def test_send_subnegotiation_iac_escape(self, connection: TelnetConnection) -> None:
-        connection.send_subnegotiation(option=1, data=b"\xff")
-
-        assert connection.data_to_send() == b"\xff\xfa\x01\xff\xff\xff\xf0"
-
     # TODO: Generate bytes with hypothesis
     def test_receive_data_application_data(self, connection: TelnetConnection) -> None:
         assert connection.receive_data(b"foo") == [ApplicationDataReceived(data=b"foo")]
@@ -127,76 +112,47 @@ class TestTelnetConnection:
         assert connection.receive_data(receive_data[1]) == [ApplicationDataReceived(data=application_data[1])]
 
     def test_receive_data_application_data_before_command(self, connection: TelnetConnection) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_application_data(b"foo")
-        peer_connection.send_command(CommandCode.AYT)
-        peer_connection.send_application_data(b"bar")
-
-        assert connection.receive_data(peer_connection.data_to_send()) == [
+        assert connection.receive_data(b"foo\xff\xf6bar") == [
             ApplicationDataReceived(data=b"foo"),
             CommandReceived(code=CommandCode.AYT),
             ApplicationDataReceived(data=b"bar"),
         ]
 
     def test_receive_data_application_data_before_negotiation(self, connection: TelnetConnection) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_application_data(b"foo")
-        peer_connection.send_negotiation(NegotiationVerb.DO, NegotiationOption.ECHO)
-        peer_connection.send_application_data(b"bar")
-
-        assert connection.receive_data(peer_connection.data_to_send()) == [
+        assert connection.receive_data(b"foo\xff\xfd\x01bar") == [
             ApplicationDataReceived(data=b"foo"),
             NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO),
             ApplicationDataReceived(data=b"bar"),
         ]
 
     def test_receive_data_application_data_before_subnegotiation(self, connection: TelnetConnection) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_application_data(b"foo")
-        peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"\x00\x64\x00\x32")
-        peer_connection.send_application_data(b"bar")
-
-        assert connection.receive_data(peer_connection.data_to_send()) == [
+        assert connection.receive_data(b"foo\xff\xfa\x1f\x00d\x002\xff\xf0bar") == [
             ApplicationDataReceived(data=b"foo"),
             SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32"),
             ApplicationDataReceived(data=b"bar"),
         ]
 
     def test_receive_data_command(self, connection: TelnetConnection) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_command(CommandCode.AYT)
-
-        assert connection.receive_data(peer_connection.data_to_send()) == [CommandReceived(code=CommandCode.AYT)]
+        assert connection.receive_data(b"\xff\xf6") == [CommandReceived(code=CommandCode.AYT)]
 
     def test_receive_data_negotiation(self, connection: TelnetConnection) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_negotiation(NegotiationVerb.DO, NegotiationOption.ECHO)
-
-        assert connection.receive_data(peer_connection.data_to_send()) == [
+        assert connection.receive_data(b"\xff\xfd\x01") == [
             NegotiationReceived(verb=NegotiationVerb.DO, option=NegotiationOption.ECHO)
         ]
 
     def test_receive_data_subnegotiation(self, connection: TelnetConnection) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"\x00\x64\x00\x32")
-
-        assert connection.receive_data(peer_connection.data_to_send()) == [
+        assert connection.receive_data(b"\xff\xfa\x1f\x00d\x002\xff\xf0") == [
             SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"\x00\x64\x00\x32")
         ]
 
     def test_receive_data_subnegotiation_empty_data(self, connection: TelnetConnection) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"")
-
-        assert connection.receive_data(peer_connection.data_to_send()) == [
+        assert connection.receive_data(b"\xff\xfa\x1f\xff\xf0") == [
             SubnegotiationReceived(option=NegotiationOption.NAWS, data=b"")
         ]
 
     @pytest.mark.parametrize("split", list(range(1, 9)))
     def test_receive_data_subnegotiation_fragmented(self, connection: TelnetConnection, split: int) -> None:
-        peer_connection = TelnetConnection()
-        peer_connection.send_subnegotiation(NegotiationOption.NAWS, b"\x00\x64\x00\x32")
-        data = peer_connection.data_to_send()
+        data = b"\xff\xfa\x1f\x00d\x002\xff\xf0"
 
         assert connection.receive_data(data[:split]) == []
         assert connection.receive_data(data[split:]) == [
