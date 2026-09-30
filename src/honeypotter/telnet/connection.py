@@ -15,7 +15,7 @@ from honeypotter.telnet.events import (
     OptionStateChanged,
     SubnegotiationReceived,
 )
-from honeypotter.telnet.options import OptionNegotiator
+from honeypotter.telnet.options import NegotiationAction, OptionNegotiator
 from honeypotter.telnet.types import CommandCode, NegotiationOption, NegotiationVerb, Side
 
 
@@ -148,9 +148,9 @@ class TelnetConnection:
         side, enable = self._RECEIVED_VERBS[event.verb]
         result = self._options[side].receive(event.option, enable=enable)
 
-        # send ack
+        # send negotiation response
         if result.action is not None:
-            verb = self._SEND_VERBS[(side, enable)]
+            verb = self._SEND_VERBS[(side, result.action is NegotiationAction.SEND_ENABLE)]
             self._send_negotiation(verb, event.option)
 
         if result.enabled_changed:

@@ -179,3 +179,9 @@ class TestTelnetConnection:
             NegotiationReceived(verb=NegotiationVerb.WILL, option=NegotiationOption.SGA),
             OptionStateChanged(option=NegotiationOption.SGA, side=Side.REMOTE, enabled=True),
         ]
+        assert connection.data_to_send() == b""
+
+    def test_reject_disallowed_option(self, connection: TelnetConnection) -> None:
+        connection.receive_data(b"\xff\xfd\x01")  # DO ECHO
+
+        assert connection.data_to_send() == b"\xff\xfc\x01"  # WON'T ECHO
