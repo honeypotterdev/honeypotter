@@ -19,9 +19,15 @@ _logger = logging.getLogger(__name__)
 
 @click.group()
 @click.option("-v", "--verbose", count=True)
-def cli(verbose: int) -> None:
+@click.option("--sentry-dsn", type=str, envvar="SENTRY_DSN")
+def cli(verbose: int, sentry_dsn: str | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="{levelname} {asctime} {name}:{lineno} {message}", style="{")
     logging.getLogger("honeypotter").setLevel(logging.DEBUG if verbose else logging.INFO)
+
+    if sentry_dsn is not None:
+        import sentry_sdk
+
+        sentry_sdk.init(dsn=sentry_dsn, enable_logs=True)
 
 
 @cli.command()
