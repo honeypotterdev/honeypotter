@@ -1,4 +1,4 @@
-from unittest.mock import Mock, call
+from unittest.mock import MagicMock, call
 
 import pytest
 
@@ -15,7 +15,7 @@ class TestMqttHandler:
         return MqttHandler()
 
     def test(self, handler: MqttHandler) -> None:
-        context = Mock(spec=HandlerContext)
+        context = MagicMock(spec=HandlerContext)
 
         client_connection = MqttConnection()
 
