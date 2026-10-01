@@ -1,13 +1,7 @@
 from enum import Enum, auto
 
-from honeypotter.mqtt.packets import (
-    ConnectPacket,
-    DisconnectPacket,
-    Packet,
-    PublishPacket,
-    SubscribePacket,
-    Subscription,
-)
+from honeypotter.mqtt.events import ConnectReceived, DisconnectReceived, Event, PublishReceived, SubscribeReceived
+from honeypotter.mqtt.types import Subscription
 from honeypotter.mqtt.utils import decode_remaining_length, decode_utf8_string
 from honeypotter.statemachine import Machine, MachineError, Transition
 
@@ -17,10 +11,6 @@ class State(Enum):
     READ_REMAINING_LENGTH = auto()
     READ_PACKET = auto()
     FAILED = auto()
-
-
-class ControlPacketType(Enum):
-    CONNECT = auto()
 
 
 class MqttParseError(Exception):
@@ -54,7 +44,7 @@ class MqttParser:
                     State.READ_REMAINING_LENGTH,
                     State.READ_TYPE_AND_FLAGS,
                     condition="zero_length",
-                    action="finish_packet",
+                    action="finish_event",
                 ),
                 Transition(
                     "byte",
@@ -80,12 +70,12 @@ class MqttParser:
                     "byte",
                     State.READ_PACKET,
                     State.READ_TYPE_AND_FLAGS,
-                    action="finish_packet",
+                    action="finish_event",
                 ),
             ],
         )
 
-    def feed_byte(self, byte: int) -> Packet | None:
+    def feed_byte(self, byte: int) -> Event | None:
         try:
             return self._machine.trigger("byte", byte)
         except MachineError as e:
@@ -124,26 +114,26 @@ class MqttParser:
 
         return self._packet_length != 0
 
-    def finish_packet(self, byte: int) -> Packet:
+    def finish_event(self, byte: int) -> Event:
         self._buffer.append(byte)
         buffer = bytes(self._buffer)
         self._buffer.clear()
 
-        packet: Packet
+        event: Event
 
         match self._packet_type:
             case 1:
-                packet = _parse_connect_packet(buffer, flags=self._packet_flags)
+                event = _parse_connect_packet(buffer, flags=self._packet_flags)
             case 3:
-                packet = _parse_publish_packet(buffer, flags=self._packet_flags)
+                event = _parse_publish_packet(buffer, flags=self._packet_flags)
             case 8:
-                packet = _parse_subscribe_packet(buffer, flags=self._packet_flags)
+                event = _parse_subscribe_packet(buffer, flags=self._packet_flags)
             case 14:
-                packet = _parse_disconnect_packet(buffer, flags=self._packet_flags)
+                event = _parse_disconnect_packet(buffer, flags=self._packet_flags)
             case _:
                 raise MqttParseError(f"Unknown packet type {self._packet_type}", state=self._machine.state, byte=byte)
 
-        return packet
+        return event
 
 
 class _MqttReader:
@@ -186,7 +176,7 @@ class _MqttReader:
         return self.read_bytes(self.remaining)
 
 
-def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> ConnectPacket:
+def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> ConnectReceived:
     if flags != 0:
         raise MqttParseError("CONNECT fixed-header flags must be zero")
 
@@ -223,7 +213,7 @@ def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Conne
     if reader.remaining:
         raise ValueError("Unexpected trailing bytes in CONNECT packet")
 
-    return ConnectPacket(
+    return ConnectReceived(
         protocol_name=protocol_name,
         protocol_level=protocol_level,
         clean_session=clean_session,
@@ -238,7 +228,7 @@ def _parse_connect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Conne
     )
 
 
-def _parse_publish_packet(packet: bytes | bytearray, *, flags: int = 0) -> PublishPacket:
+def _parse_publish_packet(packet: bytes | bytearray, *, flags: int = 0) -> PublishReceived:
     dup = bool(flags & 8)
     qos = (flags >> 1) & 3
     retain = bool(flags & 1)
@@ -253,12 +243,12 @@ def _parse_publish_packet(packet: bytes | bytearray, *, flags: int = 0) -> Publi
 
     message = reader.read_remaining_bytes()
 
-    return PublishPacket(
+    return PublishReceived(
         dup=dup, qos=qos, retain=retain, topic_name=topic_name, message_identifier=message_identifier, message=message
     )
 
 
-def _parse_subscribe_packet(packet: bytes | bytearray, *, flags: int = 0) -> SubscribePacket:
+def _parse_subscribe_packet(packet: bytes | bytearray, *, flags: int = 0) -> SubscribeReceived:
     reader = _MqttReader(packet)
     message_identifier = reader.read_uint16()
     subscriptions = []
@@ -268,10 +258,10 @@ def _parse_subscribe_packet(packet: bytes | bytearray, *, flags: int = 0) -> Sub
         qos = reader.read_uint8()
         subscriptions.append(Subscription(topic_filter=topic_filter, qos=qos))
 
-    return SubscribePacket(message_identifier=message_identifier, subscriptions=subscriptions)
+    return SubscribeReceived(message_identifier=message_identifier, subscriptions=subscriptions)
 
 
-def _parse_disconnect_packet(packet: bytes | bytearray, *, flags: int = 0) -> DisconnectPacket:
+def _parse_disconnect_packet(packet: bytes | bytearray, *, flags: int = 0) -> DisconnectReceived:
     reader = _MqttReader(packet)
     remaining = reader.read_remaining_bytes()
 
@@ -281,4 +271,4 @@ def _parse_disconnect_packet(packet: bytes | bytearray, *, flags: int = 0) -> Di
     if reader.remaining:
         raise MqttParseError("Unexpected trailing bytes in DISCONNECT packet")
 
-    return DisconnectPacket()
+    return DisconnectReceived()
