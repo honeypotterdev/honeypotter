@@ -1,7 +1,7 @@
 import pytest
 
+from honeypotter.mqtt.connection import MqttConnection
 from honeypotter.mqtt.packets import ConnectPacket, DisconnectPacket, PublishPacket, SubscribePacket, Subscription
-from honeypotter.mqtt.sans import MqttConnection
 
 
 class TestMqttConnection:
@@ -33,9 +33,9 @@ class TestMqttConnection:
         assert connection.send_sub_ack_packet(message_identifier=1, return_codes=[0]) == b"\x90\x03\x00\x01\x00"
 
     def test_receive_data_connect_packet(self, connection: MqttConnection) -> None:
-        packet = ConnectPacket(client_id="john")
-
-        assert connection.receive_data(packet.to_bytes()) == [packet]
+        assert connection.receive_data(b"\x10\x10\x00\x04MQTT\x04\x02\x00<\x00\x04john") == [
+            ConnectPacket(client_id="john")
+        ]
 
     def test_receive_data_publish_packet(self, connection: MqttConnection) -> None:
         packet = PublishPacket(topic_name="foo")
