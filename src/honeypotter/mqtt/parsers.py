@@ -19,10 +19,6 @@ class State(Enum):
     FAILED = auto()
 
 
-class ControlPacketType(Enum):
-    CONNECT = auto()
-
-
 class MqttParseError(Exception):
     def __init__(self, message: str, *, state: State | None = None, byte: int | None = None) -> None:
         super().__init__(message)
