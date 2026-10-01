@@ -2,8 +2,8 @@ import logging
 from typing import Any
 
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.mqtt.connection import ConnectionEvent, MqttConnection
-from honeypotter.mqtt.events import ConnectReceived, DisconnectReceived, PublishReceived, SubscribeReceived
+from honeypotter.mqtt.connection import MqttConnection
+from honeypotter.mqtt.events import ConnectReceived, DisconnectReceived, Event, PublishReceived, SubscribeReceived
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
@@ -30,16 +30,15 @@ class MqttHandler(Handler):
         for connection_event in events:
             self._handle_connection_event(context, connection_event)
 
-    def _handle_connection_event(self, context: HandlerContext, event: ConnectionEvent) -> None:
+    def _handle_connection_event(self, context: HandlerContext, event: Event) -> None:
         match event:
             case ConnectReceived():
                 context.send_outbound(DataEvent(data=self._connection.send_conn_ack_packet()))
             case DisconnectReceived():
                 context.send_outbound(DisconnectRequestEvent())
-            case (
-                PublishReceived(qos=1, message_identifier=message_identifier)
-                | PublishReceived(qos=2, message_identifier=message_identifier)
-            ):
+            case PublishReceived(qos=0):
+                pass
+            case PublishReceived(message_identifier=message_identifier):
                 assert message_identifier is not None
 
                 context.send_outbound(
