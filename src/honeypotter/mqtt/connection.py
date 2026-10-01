@@ -3,10 +3,6 @@ from dataclasses import dataclass
 from honeypotter.mqtt.packets import (
     ConnectReturnCode,
     Packet,
-    PubAckPacket,
-    PublishPacket,
-    SubAckPacket,
-    SubscribePacket,
     Subscription,
 )
 from honeypotter.mqtt.parsers import MqttParseError, MqttParser
@@ -112,23 +108,59 @@ class MqttConnection:
         message_identifier: int | None = None,
         message: bytes = b"",
     ) -> bytes:
-        return PublishPacket(
-            dup=dup,
-            qos=qos,
-            retain=retain,
-            topic_name=topic_name,
-            message_identifier=message_identifier,
-            message=message,
-        ).to_bytes()
+        header = 48
+
+        if dup:
+            header |= 8
+        if qos:
+            header |= qos << 1
+        if retain:
+            header |= 1
+
+        header_bytes = header.to_bytes()
+
+        topic_name_bytes = topic_name.encode("utf-8")
+        topic_name_length_bytes = len(topic_name_bytes).to_bytes(length=2)
+        variable_header = topic_name_length_bytes + topic_name_bytes
+
+        if message_identifier is not None:
+            variable_header += message_identifier.to_bytes(length=2)
+
+        remaining_length = encode_remaining_length(len(variable_header + message))
+
+        return header_bytes + remaining_length + variable_header + message
 
     def send_pub_ack_packet(self, message_identifier: int) -> bytes:
-        return PubAckPacket(message_identifier=message_identifier).to_bytes()
+        variable_header = message_identifier.to_bytes(length=2)
+        remaining_length = encode_remaining_length(len(variable_header))
+
+        return b"\x40" + remaining_length + variable_header
 
     def send_subscribe_packet(self, *, message_identifier: int, subscriptions: list[Subscription]) -> bytes:
-        return SubscribePacket(message_identifier=message_identifier, subscriptions=subscriptions).to_bytes()
+        variable_header = message_identifier.to_bytes(length=2)
+        payload = b""
+
+        for subscription in subscriptions:
+            subscription_topic_bytes = subscription.topic_filter.encode("utf-8")
+            payload += (
+                len(subscription_topic_bytes).to_bytes(length=2)
+                + subscription_topic_bytes
+                + subscription.qos.to_bytes()
+            )
+
+        remaining_length = encode_remaining_length(len(variable_header + payload))
+
+        return b"\x82" + remaining_length + variable_header + payload
 
     def send_sub_ack_packet(self, message_identifier: int, return_codes: list[int]) -> bytes:
-        return SubAckPacket(message_identifier=message_identifier, return_codes=return_codes).to_bytes()
+        variable_header = message_identifier.to_bytes(length=2)
+        payload = b"".join(code.to_bytes() for code in return_codes)
+        remaining_length = encode_remaining_length(len(variable_header + payload))
+
+        return b"\x90" + remaining_length + variable_header + payload
+
+    def send_disconnect(self) -> bytes:
+        return b"\xe0\x00"
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
         if self._receive_failed:

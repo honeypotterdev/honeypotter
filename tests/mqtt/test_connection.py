@@ -32,22 +32,21 @@ class TestMqttConnection:
     def test_send_sub_ack_packet(self, connection: MqttConnection) -> None:
         assert connection.send_sub_ack_packet(message_identifier=1, return_codes=[0]) == b"\x90\x03\x00\x01\x00"
 
+    def test_send_disconnect_packet(self, connection: MqttConnection) -> None:
+        assert connection.send_disconnect() == b"\xe0\x00"
+
     def test_receive_data_connect_packet(self, connection: MqttConnection) -> None:
         assert connection.receive_data(b"\x10\x10\x00\x04MQTT\x04\x02\x00<\x00\x04john") == [
             ConnectPacket(client_id="john")
         ]
 
     def test_receive_data_publish_packet(self, connection: MqttConnection) -> None:
-        packet = PublishPacket(topic_name="foo")
-
-        assert connection.receive_data(packet.to_bytes()) == [packet]
+        assert connection.receive_data(b"0\x05\x00\x03foo") == [PublishPacket(topic_name="foo")]
 
     def test_receive_data_subscribe_packet(self, connection: MqttConnection) -> None:
-        packet = SubscribePacket(message_identifier=1, subscriptions=[Subscription(topic_filter="foo", qos=0)])
-
-        assert connection.receive_data(packet.to_bytes()) == [packet]
+        assert connection.receive_data(b"\x82\x08\x00\x01\x00\x03foo\x00") == [
+            SubscribePacket(message_identifier=1, subscriptions=[Subscription(topic_filter="foo", qos=0)])
+        ]
 
     def test_receive_data_disconnect_packet(self, connection: MqttConnection) -> None:
-        packet = DisconnectPacket()
-
-        assert connection.receive_data(packet.to_bytes()) == [packet]
+        assert connection.receive_data(b"\xe0\x00") == [DisconnectPacket()]
