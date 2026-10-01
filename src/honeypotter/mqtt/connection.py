@@ -1,20 +1,7 @@
-from dataclasses import dataclass
-
-from honeypotter.mqtt.packets import (
-    ConnectReturnCode,
-    Packet,
-    Subscription,
-)
+from honeypotter.mqtt.events import ConnectionFailed, Event
 from honeypotter.mqtt.parsers import MqttParseError, MqttParser
+from honeypotter.mqtt.types import ConnectReturnCode, Subscription
 from honeypotter.mqtt.utils import encode_remaining_length
-
-
-@dataclass(frozen=True, kw_only=True)
-class ProtocolErrorOccurred:
-    pass
-
-
-type ConnectionEvent = Packet | ProtocolErrorOccurred
 
 
 class MqttConnection:
@@ -162,18 +149,18 @@ class MqttConnection:
     def send_disconnect(self) -> bytes:
         return b"\xe0\x00"
 
-    def receive_data(self, data: bytes) -> list[ConnectionEvent]:
+    def receive_data(self, data: bytes) -> list[Event]:
         if self._receive_failed:
             return []
 
-        events: list[ConnectionEvent] = []
+        events: list[Event] = []
 
         for byte in data:
             try:
                 event = self._parser.feed_byte(byte)
             except MqttParseError:
                 self._receive_failed = True
-                events.append(ProtocolErrorOccurred())
+                events.append(ConnectionFailed())
                 return events
 
             if event is not None:

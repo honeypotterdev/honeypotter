@@ -1,7 +1,8 @@
 import pytest
 
 from honeypotter.mqtt.connection import MqttConnection
-from honeypotter.mqtt.packets import ConnectPacket, DisconnectPacket, PublishPacket, SubscribePacket, Subscription
+from honeypotter.mqtt.events import ConnectReceived, DisconnectReceived, PublishReceived, SubscribeReceived
+from honeypotter.mqtt.types import Subscription
 
 
 class TestMqttConnection:
@@ -37,16 +38,16 @@ class TestMqttConnection:
 
     def test_receive_data_connect_packet(self, connection: MqttConnection) -> None:
         assert connection.receive_data(b"\x10\x10\x00\x04MQTT\x04\x02\x00<\x00\x04john") == [
-            ConnectPacket(client_id="john")
+            ConnectReceived(client_id="john")
         ]
 
     def test_receive_data_publish_packet(self, connection: MqttConnection) -> None:
-        assert connection.receive_data(b"0\x05\x00\x03foo") == [PublishPacket(topic_name="foo")]
+        assert connection.receive_data(b"0\x05\x00\x03foo") == [PublishReceived(topic_name="foo")]
 
     def test_receive_data_subscribe_packet(self, connection: MqttConnection) -> None:
         assert connection.receive_data(b"\x82\x08\x00\x01\x00\x03foo\x00") == [
-            SubscribePacket(message_identifier=1, subscriptions=[Subscription(topic_filter="foo", qos=0)])
+            SubscribeReceived(message_identifier=1, subscriptions=[Subscription(topic_filter="foo", qos=0)])
         ]
 
     def test_receive_data_disconnect_packet(self, connection: MqttConnection) -> None:
-        assert connection.receive_data(b"\xe0\x00") == [DisconnectPacket()]
+        assert connection.receive_data(b"\xe0\x00") == [DisconnectReceived()]

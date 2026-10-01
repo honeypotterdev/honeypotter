@@ -36,5 +36,6 @@ class OptionStateChanged(Event):
     enabled: bool
 
 
+@dataclass(kw_only=True)
 class ConnectionFailed(Event):
     pass
