@@ -35,7 +35,8 @@ class MqttHandler(Handler):
 
         match event:
             case ConnectReceived():
-                context.send_outbound(DataEvent(data=self._connection.send_conn_ack_packet()))
+                self._connection.send_conn_ack_packet()
+                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
             case DisconnectReceived():
                 context.send_outbound(DisconnectRequestEvent())
             case PublishReceived(qos=0):
@@ -43,9 +44,8 @@ class MqttHandler(Handler):
             case PublishReceived(message_identifier=message_identifier):
                 assert message_identifier is not None
 
-                context.send_outbound(
-                    DataEvent(data=self._connection.send_pub_ack_packet(message_identifier=message_identifier))
-                )
+                self._connection.send_pub_ack_packet(message_identifier=message_identifier)
+                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
             case SubscribeReceived():
                 self._handle_subscribe_event(context, event)
             case _:
@@ -58,14 +58,11 @@ class MqttHandler(Handler):
         context.pipeline.metadata["mqtt.commands"].append(event)
 
     def _handle_subscribe_event(self, context: HandlerContext, event: SubscribeReceived) -> None:
-        context.send_outbound(
-            DataEvent(
-                data=self._connection.send_sub_ack_packet(
-                    message_identifier=event.message_identifier,
-                    return_codes=[subscription.qos for subscription in event.subscriptions],
-                )
-            )
+        self._connection.send_sub_ack_packet(
+            message_identifier=event.message_identifier,
+            return_codes=[subscription.qos for subscription in event.subscriptions],
         )
+        context.send_outbound(DataEvent(data=self._connection.data_to_send()))
 
         for subscription in event.subscriptions:
             if subscription.topic_filter == "$SYS/#":
@@ -131,8 +128,5 @@ class MqttHandler(Handler):
         ]
 
         for topic_name, message in output:
-            context.send_outbound(
-                DataEvent(
-                    data=self._connection.send_publish_packet(topic_name=topic_name, message=message, retain=True)
-                )
-            )
+            self._connection.send_publish_packet(topic_name=topic_name, message=message, retain=True)
+            context.send_outbound(DataEvent(data=self._connection.data_to_send()))

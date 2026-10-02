@@ -11,30 +11,39 @@ class TestMqttConnection:
         return MqttConnection()
 
     def test_send_connect_packet(self, connection: MqttConnection) -> None:
-        assert connection.send_connect_packet() == b"\x10\x0c\x00\x04\x4d\x51\x54\x54\x04\x02\x00\x3c\x00\x00"
+        connection.send_connect_packet()
+
+        assert connection.data_to_send() == b"\x10\x0c\x00\x04\x4d\x51\x54\x54\x04\x02\x00\x3c\x00\x00"
 
     def test_send_conn_ack_packet(self, connection: MqttConnection) -> None:
-        assert connection.send_conn_ack_packet() == b"\x20\x02\x00\x00"
+        connection.send_conn_ack_packet()
+
+        assert connection.data_to_send() == b"\x20\x02\x00\x00"
 
     def test_send_publish_packet(self, connection: MqttConnection) -> None:
-        assert connection.send_publish_packet(topic_name="foo") == b"\x30\x05\x00\x03\x66\x6f\x6f"
+        connection.send_publish_packet(topic_name="foo")
+
+        assert connection.data_to_send() == b"\x30\x05\x00\x03\x66\x6f\x6f"
 
     def test_send_pub_ack_packet(self, connection: MqttConnection) -> None:
-        assert connection.send_pub_ack_packet(message_identifier=1) == b"\x40\x02\x00\x01"
+        connection.send_pub_ack_packet(message_identifier=1)
+
+        assert connection.data_to_send() == b"\x40\x02\x00\x01"
 
     def test_send_subscribe_packet(self, connection: MqttConnection) -> None:
-        assert (
-            connection.send_subscribe_packet(
-                message_identifier=1, subscriptions=[Subscription(topic_filter="foo", qos=0)]
-            )
-            == b"\x82\x08\x00\x01\x00\x03\x66\x6f\x6f\x00"
-        )
+        connection.send_subscribe_packet(message_identifier=1, subscriptions=[Subscription(topic_filter="foo", qos=0)])
+
+        assert connection.data_to_send() == b"\x82\x08\x00\x01\x00\x03\x66\x6f\x6f\x00"
 
     def test_send_sub_ack_packet(self, connection: MqttConnection) -> None:
-        assert connection.send_sub_ack_packet(message_identifier=1, return_codes=[0]) == b"\x90\x03\x00\x01\x00"
+        connection.send_sub_ack_packet(message_identifier=1, return_codes=[0])
+
+        assert connection.data_to_send() == b"\x90\x03\x00\x01\x00"
 
     def test_send_disconnect_packet(self, connection: MqttConnection) -> None:
-        assert connection.send_disconnect() == b"\xe0\x00"
+        connection.send_disconnect()
+
+        assert connection.data_to_send() == b"\xe0\x00"
 
     def test_receive_data_connect_packet(self, connection: MqttConnection) -> None:
         assert connection.receive_data(b"\x10\x10\x00\x04MQTT\x04\x02\x00<\x00\x04john") == [

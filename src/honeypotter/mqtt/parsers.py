@@ -1,4 +1,5 @@
 from enum import Enum, auto
+from typing import cast
 
 from honeypotter.mqtt.events import ConnectReceived, DisconnectReceived, Event, PublishReceived, SubscribeReceived
 from honeypotter.mqtt.types import Subscription
@@ -77,7 +78,7 @@ class MqttParser:
 
     def feed_byte(self, byte: int) -> Event | None:
         try:
-            return self._machine.trigger("byte", byte)
+            return cast(Event | None, self._machine.trigger("byte", byte))
         except MachineError as e:
             error = MqttParseError("Machine error occurred", state=self._machine.state, byte=byte)
             self._machine.transition_to(State.FAILED)

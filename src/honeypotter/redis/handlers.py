@@ -1,10 +1,16 @@
 import logging
-from typing import Any
+from typing import Any, cast
 
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.redis.sans import ConnectionEvent, RedisConnection
+from honeypotter.redis.connection import RedisConnection
+from honeypotter.redis.events import (
+    ArrayReceived,
+    BulkStringReceived,
+    Event,
+    NullBulkStringReceived,
+    SimpleStringReceived,
+)
 from honeypotter.redis.utils import InfoProvider
-from honeypotter.redis.values import Array, BulkString, RespValue
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
@@ -32,39 +38,55 @@ class RedisHandler(Handler):
         for connection_event in events:
             self._handle_connection_event(context, connection_event)
 
-    def _handle_connection_event(self, context: HandlerContext, event: ConnectionEvent) -> None:
+    def _handle_connection_event(self, context: HandlerContext, event: Event) -> None:
         match event:
-            case Array(array=[BulkString(string=command), *args]):
+            case ArrayReceived(array=[BulkStringReceived(string=command), *args]):
                 self._handle_command(context, command, args)
             case _:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_error(b"ERR unknown error")))
+                self._connection.send_simple_error(b"ERR unknown error")
+                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
                 context.send_outbound(DisconnectRequestEvent())
 
-    def _handle_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
+    def _handle_command(
+        self,
+        context: HandlerContext,
+        command: bytes,
+        args: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived],
+    ) -> None:
         self._log_command(context, command, args)
 
         match command.upper(), args:
             case b"QUIT", *_:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+                self._connection.send_simple_string(b"OK")
+                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
                 context.send_outbound(DisconnectRequestEvent())
+                return
             case b"PING", []:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"PONG")))
+                self._connection.send_simple_string(b"PONG")
             case b"INFO", []:
                 info = _info_provider.generate_info().encode("utf-8")
-                context.send_outbound(DataEvent(data=self._connection.send_bulk_string(info)))
-            case b"SET", [BulkString(string=_), BulkString(string=_)]:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+                self._connection.send_bulk_string(info)
+            case b"SET", [BulkStringReceived(string=_), BulkStringReceived(string=_)]:
+                self._connection.send_simple_string(b"OK")
             case _:
-                context.send_outbound(
-                    DataEvent(data=self._connection.send_simple_error(b"ERR unknown command '" + command + b"'"))
-                )
+                self._connection.send_simple_error(b"ERR unknown command '" + command + b"'")
 
-    def _log_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
-        if not all(isinstance(arg, BulkString) for arg in args):
+        if data_to_send := self._connection.data_to_send():
+            context.send_outbound(DataEvent(data=data_to_send))
+
+    def _log_command(
+        self,
+        context: HandlerContext,
+        command: bytes,
+        args: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived],
+    ) -> None:
+        if not all(isinstance(arg, BulkStringReceived) for arg in args):
             return
+
+        bulk_strings = cast(list[BulkStringReceived], args)
 
         if "redis.commands" not in context.pipeline.metadata:
             context.pipeline.metadata["redis.commands"] = []
 
-        full_command = b" ".join([command] + [arg.string for arg in args])
+        full_command = b" ".join([command] + [arg.string for arg in bulk_strings])
         context.pipeline.metadata["redis.commands"].append(full_command)

@@ -18,29 +18,14 @@ class TestMqttHandler:
         context = MagicMock(spec=HandlerContext)
 
         client_connection = MqttConnection()
+        client_connection.send_connect_packet()
+        client_connection.send_publish_packet(topic_name="topic1", message=b"message1")
+        client_connection.send_publish_packet(topic_name="topic2", message=b"message2", qos=1, message_identifier=1)
+        client_connection.send_subscribe_packet(message_identifier=2, subscriptions=[Subscription(topic_filter="#")])
+        client_connection.send_disconnect()
 
         handler.handle_inbound(context, ConnectionMadeEvent())
-        handler.handle_inbound(context, DataEvent(data=client_connection.send_connect_packet()))
-        handler.handle_inbound(
-            context, DataEvent(data=client_connection.send_publish_packet(topic_name="topic1", message=b"message1"))
-        )
-        handler.handle_inbound(
-            context,
-            DataEvent(
-                data=client_connection.send_publish_packet(
-                    topic_name="topic2", message=b"message2", qos=1, message_identifier=1
-                )
-            ),
-        )
-        handler.handle_inbound(
-            context,
-            DataEvent(
-                data=client_connection.send_subscribe_packet(
-                    message_identifier=2, subscriptions=[Subscription(topic_filter="#")]
-                )
-            ),
-        )
-        handler.handle_inbound(context, DataEvent(data=client_connection.send_disconnect()))
+        handler.handle_inbound(context, DataEvent(data=client_connection.data_to_send()))
 
         assert context.send_inbound.call_args_list == [call(ConnectionMadeEvent())]
         assert context.send_outbound.call_args_list == [

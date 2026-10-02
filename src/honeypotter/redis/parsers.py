@@ -1,8 +1,15 @@
 import shlex
 from enum import Enum, auto
+from typing import cast
 
 from honeypotter.constants import ASTERISK, CR, DOLLAR, LF, MINUS, NINE, ONE, PLUS, ZERO
-from honeypotter.redis.values import Array, BulkString, NullBulkString, RespValue, SimpleString
+from honeypotter.redis.events import (
+    ArrayReceived,
+    BulkStringReceived,
+    Event,
+    NullBulkStringReceived,
+    SimpleStringReceived,
+)
 from honeypotter.statemachine import Machine, MachineError, Transition
 
 
@@ -35,7 +42,7 @@ class RespParser:
         self._buffer = bytearray()
         self._bulk_string_bytes_remaining = 0
         self._array_items_remaining = 0
-        self._array_buffer: list[RespValue] = []
+        self._array_buffer: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived] = []
 
         self._machine = Machine(
             model=self,
@@ -139,9 +146,9 @@ class RespParser:
             ],
         )
 
-    def feed_byte(self, byte: int) -> RespValue | None:
+    def feed_byte(self, byte: int) -> Event | None:
         try:
-            return self._machine.trigger("byte", byte)
+            return cast(Event | None, self._machine.trigger("byte", byte))
         except MachineError as e:
             error = RespParseError("Machine error occurred", state=self._machine.state, byte=byte)
             self._machine.transition_to(State.FAILED)
@@ -177,8 +184,8 @@ class RespParser:
     def append_byte(self, byte: int) -> None:
         self._buffer.append(byte)
 
-    def finish_simple_string(self, byte: int) -> RespValue | None:
-        simple_string = SimpleString(string=bytes(self._buffer))
+    def finish_simple_string(self, byte: int) -> Event | None:
+        simple_string = SimpleStringReceived(string=bytes(self._buffer))
         self._buffer.clear()
 
         return self._accept_value(simple_string)
@@ -191,42 +198,42 @@ class RespParser:
         self._buffer.append(byte)
         self._bulk_string_bytes_remaining -= 1
 
-    def finish_bulk_string(self, byte: int) -> RespValue | None:
-        bulk_string = BulkString(string=bytes(self._buffer))
+    def finish_bulk_string(self, byte: int) -> Event | None:
+        bulk_string = BulkStringReceived(string=bytes(self._buffer))
         self._buffer.clear()
 
         return self._accept_value(bulk_string)
 
-    def parse_array_length(self, byte: int) -> RespValue | None:
+    def parse_array_length(self, byte: int) -> Event | None:
         self._array_items_remaining = int(self._buffer)
         self._buffer.clear()
 
         # Zero length array case
         if self._array_items_remaining == 0:
-            return Array(array=[])
+            return ArrayReceived(array=[])
 
         return None
 
-    def finish_null_bulk_string(self, byte: int) -> RespValue | None:
-        null_bull_string = NullBulkString()
+    def finish_null_bulk_string(self, byte: int) -> Event | None:
+        null_bull_string = NullBulkStringReceived()
 
         return self._accept_value(null_bull_string)
 
     def reject_unexpected_lf(self, byte: int) -> None:
         raise RespParseError("Unexpected LF", state=self._machine.state, byte=byte)
 
-    def finish_inline_command(self, byte: int) -> RespValue:
+    def finish_inline_command(self, byte: int) -> Event:
         commands = bytes(self._buffer)
         self._buffer.clear()
 
         if commands.endswith(b"\r"):
             commands = commands[:-1]
 
-        strings = [BulkString(string=command.encode()) for command in shlex.split(commands.decode())]
+        strings = [BulkStringReceived(string=command.encode()) for command in shlex.split(commands.decode())]
 
-        return Array(array=strings)
+        return ArrayReceived(array=strings)
 
-    def _accept_value(self, event: RespValue) -> RespValue | None:
+    def _accept_value(self, event: SimpleStringReceived | BulkStringReceived | NullBulkStringReceived) -> Event | None:
         if self._array_items_remaining == 0:
             return event
 
@@ -236,7 +243,7 @@ class RespParser:
         if self._array_items_remaining != 0:
             return None
 
-        array = Array(array=self._array_buffer)
+        array = ArrayReceived(array=self._array_buffer)
         self._array_buffer = []
 
         return array
