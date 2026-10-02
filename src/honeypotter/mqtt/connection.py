@@ -6,8 +6,15 @@ from honeypotter.mqtt.utils import encode_remaining_length
 
 class MqttConnection:
     def __init__(self) -> None:
+        self._outgoing_buffer = bytearray()
         self._parser = MqttParser()
-        self._receive_failed = False
+        self._is_failed = False
+
+    def data_to_send(self) -> bytes:
+        data = bytes(self._outgoing_buffer)
+        self._outgoing_buffer.clear()
+
+        return data
 
     def send_connect_packet(
         self,
@@ -23,7 +30,7 @@ class MqttConnection:
         will_retain: bool = False,
         username: str | None = None,
         password: bytes | None = None,
-    ) -> bytes:
+    ) -> None:
         protocol_name_bytes = protocol_name.encode("utf-8")
         protocol_name_length_bytes = len(protocol_name_bytes).to_bytes(length=2)
         protocol_level_bytes = protocol_level.to_bytes()
@@ -73,17 +80,17 @@ class MqttConnection:
 
         remaining_length = encode_remaining_length(len(variable_header + payload))
 
-        return b"\x10" + remaining_length + variable_header + payload
+        self._outgoing_buffer.extend(b"\x10" + remaining_length + variable_header + payload)
 
     def send_conn_ack_packet(
         self, *, session_present: bool = False, return_code: ConnectReturnCode = ConnectReturnCode.ACCEPTED
-    ) -> bytes:
+    ) -> None:
         ack_flags_bytes = int(session_present).to_bytes()
         return_code_bytes = return_code.to_bytes()
         variable_header = ack_flags_bytes + return_code_bytes
         remaining_length = encode_remaining_length(len(variable_header))
 
-        return b"\x20" + remaining_length + variable_header
+        self._outgoing_buffer.extend(b"\x20" + remaining_length + variable_header)
 
     def send_publish_packet(
         self,
@@ -94,7 +101,7 @@ class MqttConnection:
         topic_name: str,
         message_identifier: int | None = None,
         message: bytes = b"",
-    ) -> bytes:
+    ) -> None:
         header = 48
 
         if dup:
@@ -115,15 +122,15 @@ class MqttConnection:
 
         remaining_length = encode_remaining_length(len(variable_header + message))
 
-        return header_bytes + remaining_length + variable_header + message
+        self._outgoing_buffer.extend(header_bytes + remaining_length + variable_header + message)
 
-    def send_pub_ack_packet(self, message_identifier: int) -> bytes:
+    def send_pub_ack_packet(self, message_identifier: int) -> None:
         variable_header = message_identifier.to_bytes(length=2)
         remaining_length = encode_remaining_length(len(variable_header))
 
-        return b"\x40" + remaining_length + variable_header
+        self._outgoing_buffer.extend(b"\x40" + remaining_length + variable_header)
 
-    def send_subscribe_packet(self, *, message_identifier: int, subscriptions: list[Subscription]) -> bytes:
+    def send_subscribe_packet(self, *, message_identifier: int, subscriptions: list[Subscription]) -> None:
         variable_header = message_identifier.to_bytes(length=2)
         payload = b""
 
@@ -137,20 +144,20 @@ class MqttConnection:
 
         remaining_length = encode_remaining_length(len(variable_header + payload))
 
-        return b"\x82" + remaining_length + variable_header + payload
+        self._outgoing_buffer.extend(b"\x82" + remaining_length + variable_header + payload)
 
-    def send_sub_ack_packet(self, message_identifier: int, return_codes: list[int]) -> bytes:
+    def send_sub_ack_packet(self, message_identifier: int, return_codes: list[int]) -> None:
         variable_header = message_identifier.to_bytes(length=2)
         payload = b"".join(code.to_bytes() for code in return_codes)
         remaining_length = encode_remaining_length(len(variable_header + payload))
 
-        return b"\x90" + remaining_length + variable_header + payload
+        self._outgoing_buffer.extend(b"\x90" + remaining_length + variable_header + payload)
 
-    def send_disconnect(self) -> bytes:
-        return b"\xe0\x00"
+    def send_disconnect(self) -> None:
+        self._outgoing_buffer.extend(b"\xe0\x00")
 
     def receive_data(self, data: bytes) -> list[Event]:
-        if self._receive_failed:
+        if self._is_failed:
             return []
 
         events: list[Event] = []
@@ -159,7 +166,7 @@ class MqttConnection:
             try:
                 event = self._parser.feed_byte(byte)
             except MqttParseError:
-                self._receive_failed = True
+                self._is_failed = True
                 events.append(ConnectionFailed())
                 return events
 
