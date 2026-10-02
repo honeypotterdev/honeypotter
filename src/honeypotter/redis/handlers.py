@@ -2,9 +2,9 @@ import logging
 from typing import Any
 
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.redis.connection import ConnectionEvent, RedisConnection
+from honeypotter.redis.connection import RedisConnection
+from honeypotter.redis.events import ArrayReceived, BulkStringReceived, Event
 from honeypotter.redis.utils import InfoProvider
-from honeypotter.redis.values import Array, BulkString, RespValue
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
@@ -32,16 +32,16 @@ class RedisHandler(Handler):
         for connection_event in events:
             self._handle_connection_event(context, connection_event)
 
-    def _handle_connection_event(self, context: HandlerContext, event: ConnectionEvent) -> None:
+    def _handle_connection_event(self, context: HandlerContext, event: Event) -> None:
         match event:
-            case Array(array=[BulkString(string=command), *args]):
+            case ArrayReceived(array=[BulkStringReceived(string=command), *args]):
                 self._handle_command(context, command, args)
             case _:
                 self._connection.send_simple_error(b"ERR unknown error")
                 context.send_outbound(DataEvent(data=self._connection.data_to_send()))
                 context.send_outbound(DisconnectRequestEvent())
 
-    def _handle_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
+    def _handle_command(self, context: HandlerContext, command: bytes, args: list[Event]) -> None:
         self._log_command(context, command, args)
 
         match command.upper(), args:
@@ -55,7 +55,7 @@ class RedisHandler(Handler):
             case b"INFO", []:
                 info = _info_provider.generate_info().encode("utf-8")
                 self._connection.send_bulk_string(info)
-            case b"SET", [BulkString(string=_), BulkString(string=_)]:
+            case b"SET", [BulkStringReceived(string=_), BulkStringReceived(string=_)]:
                 self._connection.send_simple_string(b"OK")
             case _:
                 self._connection.send_simple_error(b"ERR unknown command '" + command + b"'")
@@ -63,8 +63,8 @@ class RedisHandler(Handler):
         if data_to_send := self._connection.data_to_send():
             context.send_outbound(DataEvent(data=data_to_send))
 
-    def _log_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
-        if not all(isinstance(arg, BulkString) for arg in args):
+    def _log_command(self, context: HandlerContext, command: bytes, args: list[Event]) -> None:
+        if not all(isinstance(arg, BulkStringReceived) for arg in args):
             return
 
         if "redis.commands" not in context.pipeline.metadata:

@@ -1,15 +1,5 @@
-from dataclasses import dataclass
-
+from honeypotter.redis.events import ConnectionFailed, Event
 from honeypotter.redis.parsers import RespParseError, RespParser
-from honeypotter.redis.values import RespValue
-
-
-@dataclass(frozen=True, kw_only=True)
-class ProtocolErrorOccurred:
-    pass
-
-
-type ConnectionEvent = RespValue | ProtocolErrorOccurred
 
 
 class RedisConnection:
@@ -33,18 +23,18 @@ class RedisConnection:
     def send_bulk_string(self, string: bytes) -> None:
         self._outgoing_buffer.extend(b"$" + str(len(string)).encode() + b"\r\n" + string + b"\r\n")
 
-    def receive_data(self, data: bytes) -> list[ConnectionEvent]:
+    def receive_data(self, data: bytes) -> list[Event]:
         if self._is_failed:
             return []
 
-        events: list[ConnectionEvent] = []
+        events: list[Event] = []
 
         for byte in data:
             try:
                 event = self._parser.feed_byte(byte)
             except RespParseError:
                 self._is_failed = True
-                events.append(ProtocolErrorOccurred())
+                events.append(ConnectionFailed())
                 return events
 
             if event is not None:
