@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 
@@ -22,7 +23,7 @@ class NullBulkStringReceived(Event):
 
 @dataclass(kw_only=True)
 class ArrayReceived(Event):
-    array: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived]
+    array: Sequence[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived]
 
 
 @dataclass(kw_only=True)

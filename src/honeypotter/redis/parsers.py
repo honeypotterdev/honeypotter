@@ -1,5 +1,6 @@
 import shlex
 from enum import Enum, auto
+from typing import cast
 
 from honeypotter.constants import ASTERISK, CR, DOLLAR, LF, MINUS, NINE, ONE, PLUS, ZERO
 from honeypotter.redis.events import (
@@ -147,7 +148,7 @@ class RespParser:
 
     def feed_byte(self, byte: int) -> Event | None:
         try:
-            return self._machine.trigger("byte", byte)
+            return cast(Event | None, self._machine.trigger("byte", byte))
         except MachineError as e:
             error = RespParseError("Machine error occurred", state=self._machine.state, byte=byte)
             self._machine.transition_to(State.FAILED)
