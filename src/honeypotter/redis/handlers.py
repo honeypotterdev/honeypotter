@@ -2,7 +2,7 @@ import logging
 from typing import Any
 
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.redis.sans import ConnectionEvent, RedisConnection
+from honeypotter.redis.connection import ConnectionEvent, RedisConnection
 from honeypotter.redis.utils import InfoProvider
 from honeypotter.redis.values import Array, BulkString, RespValue
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
@@ -37,7 +37,8 @@ class RedisHandler(Handler):
             case Array(array=[BulkString(string=command), *args]):
                 self._handle_command(context, command, args)
             case _:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_error(b"ERR unknown error")))
+                self._connection.send_simple_error(b"ERR unknown error")
+                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
                 context.send_outbound(DisconnectRequestEvent())
 
     def _handle_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
@@ -45,19 +46,22 @@ class RedisHandler(Handler):
 
         match command.upper(), args:
             case b"QUIT", *_:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+                self._connection.send_simple_string(b"OK")
+                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
                 context.send_outbound(DisconnectRequestEvent())
+                return
             case b"PING", []:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"PONG")))
+                self._connection.send_simple_string(b"PONG")
             case b"INFO", []:
                 info = _info_provider.generate_info().encode("utf-8")
-                context.send_outbound(DataEvent(data=self._connection.send_bulk_string(info)))
+                self._connection.send_bulk_string(info)
             case b"SET", [BulkString(string=_), BulkString(string=_)]:
-                context.send_outbound(DataEvent(data=self._connection.send_simple_string(b"OK")))
+                self._connection.send_simple_string(b"OK")
             case _:
-                context.send_outbound(
-                    DataEvent(data=self._connection.send_simple_error(b"ERR unknown command '" + command + b"'"))
-                )
+                self._connection.send_simple_error(b"ERR unknown command '" + command + b"'")
+
+        if data_to_send := self._connection.data_to_send():
+            context.send_outbound(DataEvent(data=data_to_send))
 
     def _log_command(self, context: HandlerContext, command: bytes, args: list[RespValue]) -> None:
         if not all(isinstance(arg, BulkString) for arg in args):

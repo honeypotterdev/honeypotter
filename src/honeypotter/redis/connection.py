@@ -14,11 +14,27 @@ type ConnectionEvent = RespValue | ProtocolErrorOccurred
 
 class RedisConnection:
     def __init__(self) -> None:
+        self._outgoing_buffer = bytearray()
         self._parser = RespParser()
-        self._receive_failed = False
+        self._is_failed = False
+
+    def data_to_send(self) -> bytes:
+        data = bytes(self._outgoing_buffer)
+        self._outgoing_buffer.clear()
+
+        return data
+
+    def send_simple_string(self, string: bytes) -> None:
+        self._outgoing_buffer.extend(b"+" + string + b"\r\n")
+
+    def send_simple_error(self, error: bytes) -> None:
+        self._outgoing_buffer.extend(b"-" + error + b"\r\n")
+
+    def send_bulk_string(self, string: bytes) -> None:
+        self._outgoing_buffer.extend(b"$" + str(len(string)).encode() + b"\r\n" + string + b"\r\n")
 
     def receive_data(self, data: bytes) -> list[ConnectionEvent]:
-        if self._receive_failed:
+        if self._is_failed:
             return []
 
         events: list[ConnectionEvent] = []
@@ -27,7 +43,7 @@ class RedisConnection:
             try:
                 event = self._parser.feed_byte(byte)
             except RespParseError:
-                self._receive_failed = True
+                self._is_failed = True
                 events.append(ProtocolErrorOccurred())
                 return events
 
@@ -35,12 +51,3 @@ class RedisConnection:
                 events.append(event)
 
         return events
-
-    def send_simple_string(self, string: bytes) -> bytes:
-        return b"+" + string + b"\r\n"
-
-    def send_simple_error(self, error: bytes) -> bytes:
-        return b"-" + error + b"\r\n"
-
-    def send_bulk_string(self, string: bytes) -> bytes:
-        return b"$" + str(len(string)).encode() + b"\r\n" + string + b"\r\n"

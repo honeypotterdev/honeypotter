@@ -1,6 +1,6 @@
 import pytest
 
-from honeypotter.redis.sans import ProtocolErrorOccurred, RedisConnection
+from honeypotter.redis.connection import ProtocolErrorOccurred, RedisConnection
 from honeypotter.redis.values import Array, BulkString, NullBulkString, SimpleString
 
 
@@ -8,6 +8,21 @@ class TestRedisConnection:
     @pytest.fixture
     def connection(self) -> RedisConnection:
         return RedisConnection()
+
+    def test_send_simple_string(self, connection: RedisConnection) -> None:
+        connection.send_simple_string(b"OK")
+
+        assert connection.data_to_send() == b"+OK\r\n"
+
+    def test_send_simple_error(self, connection: RedisConnection) -> None:
+        connection.send_simple_error(b"ERR")
+
+        assert connection.data_to_send() == b"-ERR\r\n"
+
+    def test_send_bulk_string(self, connection: RedisConnection) -> None:
+        connection.send_bulk_string(b"foo")
+
+        assert connection.data_to_send() == b"$3\r\nfoo\r\n"
 
     def test_receive_data_simple_string(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+OK\r\n") == [SimpleString(string=b"OK")]
@@ -26,12 +41,7 @@ class TestRedisConnection:
 
     def test_receive_data_array(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"*2\r\n+hello\r\n$5\r\nworld\r\n") == [
-            Array(
-                array=[
-                    SimpleString(string=b"hello"),
-                    BulkString(string=b"world"),
-                ]
-            )
+            Array(array=[SimpleString(string=b"hello"), BulkString(string=b"world")])
         ]
 
     def test_receive_data_array_empty(self, connection: RedisConnection) -> None:
@@ -42,13 +52,7 @@ class TestRedisConnection:
 
     def test_receive_data_inline_command_with_arguments(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"SET foo bar\r\n") == [
-            Array(
-                array=[
-                    BulkString(string=b"SET"),
-                    BulkString(string=b"foo"),
-                    BulkString(string=b"bar"),
-                ]
-            )
+            Array(array=[BulkString(string=b"SET"), BulkString(string=b"foo"), BulkString(string=b"bar")])
         ]
 
     def test_receive_data_inline_command_with_quoted_argument(self, connection: RedisConnection) -> None:
@@ -66,6 +70,3 @@ class TestRedisConnection:
     def test_receive_data_no_events_after_error(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+OK\n") == [ProtocolErrorOccurred()]
         assert connection.receive_data(b"+OK\r\n") == []
-
-    def test_send_bulk_string(self, connection: RedisConnection) -> None:
-        assert connection.send_bulk_string(b"foo") == b"$3\r\nfoo\r\n"
