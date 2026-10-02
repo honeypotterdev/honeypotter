@@ -1,9 +1,15 @@
 import logging
-from typing import Any
+from typing import Any, cast
 
 from honeypotter.core import Handler, HandlerContext
 from honeypotter.redis.connection import RedisConnection
-from honeypotter.redis.events import ArrayReceived, BulkStringReceived, Event
+from honeypotter.redis.events import (
+    ArrayReceived,
+    BulkStringReceived,
+    Event,
+    NullBulkStringReceived,
+    SimpleStringReceived,
+)
 from honeypotter.redis.utils import InfoProvider
 from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
@@ -41,7 +47,12 @@ class RedisHandler(Handler):
                 context.send_outbound(DataEvent(data=self._connection.data_to_send()))
                 context.send_outbound(DisconnectRequestEvent())
 
-    def _handle_command(self, context: HandlerContext, command: bytes, args: list[Event]) -> None:
+    def _handle_command(
+        self,
+        context: HandlerContext,
+        command: bytes,
+        args: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived],
+    ) -> None:
         self._log_command(context, command, args)
 
         match command.upper(), args:
@@ -63,12 +74,19 @@ class RedisHandler(Handler):
         if data_to_send := self._connection.data_to_send():
             context.send_outbound(DataEvent(data=data_to_send))
 
-    def _log_command(self, context: HandlerContext, command: bytes, args: list[Event]) -> None:
+    def _log_command(
+        self,
+        context: HandlerContext,
+        command: bytes,
+        args: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived],
+    ) -> None:
         if not all(isinstance(arg, BulkStringReceived) for arg in args):
             return
+
+        bulk_strings = cast(list[BulkStringReceived], args)
 
         if "redis.commands" not in context.pipeline.metadata:
             context.pipeline.metadata["redis.commands"] = []
 
-        full_command = b" ".join([command] + [arg.string for arg in args])
+        full_command = b" ".join([command] + [arg.string for arg in bulk_strings])
         context.pipeline.metadata["redis.commands"].append(full_command)

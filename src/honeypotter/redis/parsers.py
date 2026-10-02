@@ -233,7 +233,7 @@ class RespParser:
 
         return ArrayReceived(array=strings)
 
-    def _accept_value(self, event: Event) -> Event | None:
+    def _accept_value(self, event: SimpleStringReceived | BulkStringReceived | NullBulkStringReceived) -> Event | None:
         if self._array_items_remaining == 0:
             return event
 
