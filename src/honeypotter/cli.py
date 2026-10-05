@@ -6,6 +6,7 @@ import click
 
 from honeypotter.core import Handler
 from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, MessageLoggingHandler
+from honeypotter.mqtt.exporters import MqttConnectionExporter
 from honeypotter.mqtt.handlers import MqttHandler
 from honeypotter.redis.exporters import RedisConnectionExporter
 from honeypotter.redis.handlers import RedisHandler
@@ -109,11 +110,13 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
 @click.option("-p", "--port", type=int, default=1883)
-def mqtt(host: str, port: int) -> None:
-    asyncio.run(_run_mqtt_server(host=host, port=port))
+@click.option("--api-key", type=str, envvar="HONEYPOTTER_API_KEY")
+@click.option("--api-url", type=str, default="https://api.honeypotter.dev/mqtt-connection")
+def mqtt(host: str, port: int, api_key: str | None, api_url: str) -> None:
+    asyncio.run(_run_mqtt_server(host=host, port=port, api_key=api_key, api_url=api_url))
 
 
-async def _run_mqtt_server(*, host: str, port: int) -> None:
+async def _run_mqtt_server(*, host: str, port: int, api_key: str | None, api_url: str) -> None:
     loop = asyncio.get_running_loop()
 
     _logger.info("Starting server on %s:%s", host, port)
@@ -126,6 +129,10 @@ async def _run_mqtt_server(*, host: str, port: int) -> None:
         MessageLoggingHandler,
         MqttHandler,
     ]
+
+    if api_key is not None:
+        exporter = MqttConnectionExporter(api_key=api_key, url=api_url)
+        handler_factories.insert(-1, exporter.handler_factory)
 
     _logger.debug("Handlers: %s", handler_factories)
 
