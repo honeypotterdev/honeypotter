@@ -2,10 +2,10 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime
-from typing import Annotated, Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal
 
 from httpx import AsyncClient
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 from pydantic.networks import IPvAnyAddress
 
 from honeypotter.core import Handler, HandlerContext
@@ -35,13 +35,10 @@ class DisconnectReceivedDto(DisconnectReceived):
     event_type: Literal["disconnect"] = "disconnect"
 
 
-type EventDto = Annotated[
-    ConnectReceivedDto | PublishReceivedDto | SubscribeReceivedDto | DisconnectReceivedDto,
-    Field(discriminator="event_type"),
-]
+type EventDto = ConnectReceivedDto | PublishReceivedDto | SubscribeReceivedDto | DisconnectReceivedDto
 
 
-class TcpMessage(BaseModel):
+class MessageDto(BaseModel):
     model_config = ConfigDict(ser_json_bytes="base64")
 
     direction: Literal["inbound", "outbound"]
@@ -54,13 +51,13 @@ class NetworkEndpoint(BaseModel):
     port: int
 
 
-class MqttConnectionRecord(BaseModel):
+class MqttConnectionDto(BaseModel):
     model_config = ConfigDict(ser_json_bytes="base64")
 
     honeypot: NetworkEndpoint
     client: NetworkEndpoint
     events: list[EventDto]
-    messages: list[TcpMessage]
+    messages: list[MessageDto]
     created_at: datetime
 
 
@@ -68,7 +65,7 @@ class MqttConnectionExporter:
     def __init__(self, *, api_key: str, url: str) -> None:
         self._client = AsyncClient(headers={"Authorization": f"Bearer {api_key}"})
         self._url = url
-        self._queue = asyncio.Queue[MqttConnectionRecord]()
+        self._queue = asyncio.Queue[MqttConnectionDto]()
         self._worker_task = asyncio.create_task(self._worker())
 
     def handler_factory(self) -> Handler:
@@ -85,7 +82,7 @@ class MqttConnectionExporter:
             finally:
                 self._queue.task_done()
 
-    async def _export(self, record: MqttConnectionRecord) -> None:
+    async def _export(self, record: MqttConnectionDto) -> None:
         r = await self._client.post(
             self._url, headers={"Content-Type": "application/json"}, content=record.model_dump_json()
         )
@@ -93,17 +90,17 @@ class MqttConnectionExporter:
 
 
 class MqttConnectionExporterHandler(Handler):
-    mapping: ClassVar[dict[type[Event], type[EventDto]]] = {
+    _EVENT_TYPE_TO_DTO_TYPE: ClassVar[dict[type[Event], type[EventDto]]] = {
         ConnectReceived: ConnectReceivedDto,
         PublishReceived: PublishReceivedDto,
         SubscribeReceived: SubscribeReceivedDto,
         DisconnectReceived: DisconnectReceivedDto,
     }
 
-    def __init__(self, queue: asyncio.Queue[MqttConnectionRecord]) -> None:
+    def __init__(self, queue: asyncio.Queue[MqttConnectionDto]) -> None:
         super().__init__()
 
-        self._messages: list[TcpMessage] = []
+        self._messages: list[MessageDto] = []
         self._initial_time = time.monotonic()
         self._created_at = datetime.now(tz=UTC)
         self._queue = queue
@@ -126,32 +123,32 @@ class MqttConnectionExporterHandler(Handler):
     def _enqueue_connection_record(self, context: HandlerContext) -> None:
         if any(message.direction == "inbound" for message in self._messages):
             self._queue.put_nowait(
-                MqttConnectionRecord(
+                MqttConnectionDto(
                     honeypot=NetworkEndpoint(
                         ip=context.pipeline.metadata["sockname"][0], port=context.pipeline.metadata["sockname"][1]
                     ),
                     client=NetworkEndpoint(
                         ip=context.pipeline.metadata["peername"][0], port=context.pipeline.metadata["peername"][1]
                     ),
-                    events=self._serialize_events(context.pipeline.metadata["mqtt.events"]),
+                    events=self._to_event_dtos(context.pipeline.metadata.get("mqtt.events", [])),
                     messages=self._messages,
                     created_at=self._created_at,
                 )
             )
 
-    def _serialize_events(self, events: list[Event]) -> list[EventDto]:
+    def _to_event_dtos(self, events: list[Event]) -> list[EventDto]:
         dtos = []
 
         for event in events:
             try:
-                record_type = self.mapping[type(event)]
+                dto_type = self._EVENT_TYPE_TO_DTO_TYPE[type(event)]
             except KeyError:
                 continue
 
-            dto = record_type(**event.model_dump())
+            dto = dto_type(**event.model_dump())
             dtos.append(dto)
 
         return dtos
 
     def _record_message(self, direction: Literal["inbound", "outbound"], data: bytes) -> None:
-        self._messages.append(TcpMessage(direction=direction, offset=time.monotonic() - self._initial_time, data=data))
+        self._messages.append(MessageDto(direction=direction, offset=time.monotonic() - self._initial_time, data=data))
