@@ -1,10 +1,10 @@
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from honeypotter.mqtt.types import Subscription
 
 
 class Event(BaseModel):
-    model_config = ConfigDict(ser_json_bytes="base64")
+    pass
 
 
 class ConnectReceived(Event):
