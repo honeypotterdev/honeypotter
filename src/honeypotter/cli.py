@@ -47,13 +47,13 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
     ip_rate_limiter = IpRateLimiter()
 
     def pipeline_initializer(pipeline: Pipeline) -> None:
-        pipeline.add_last(ip_rate_limiter.handler_factory())
-        pipeline.add_last(InboundIdleTimeoutHandler())
-        pipeline.add_last(MessageLoggingHandler())
-        pipeline.add_last(TelnetHandler())
-        pipeline.add_last(LineDecoderHandler())
-        pipeline.add_last(BusyboxShellHandler())
-        pipeline.add_last(ShellRecorder())
+        pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
+        pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
+        pipeline.add_last("message_logging", MessageLoggingHandler())
+        pipeline.add_last("telnet", TelnetHandler())
+        pipeline.add_last("line_decoder", LineDecoderHandler())
+        pipeline.add_last("busybox_shell", BusyboxShellHandler())
+        pipeline.add_last("shell_recorder", ShellRecorder())
 
     server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
@@ -78,15 +78,15 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
     ip_rate_limiter = IpRateLimiter()
 
     def pipeline_initializer(pipeline: Pipeline) -> None:
-        pipeline.add_last(ip_rate_limiter.handler_factory())
-        pipeline.add_last(InboundIdleTimeoutHandler())
-        pipeline.add_last(MessageLoggingHandler())
+        pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
+        pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
+        pipeline.add_last("message_logging", MessageLoggingHandler())
 
         if api_key is not None:
             exporter = RedisConnectionExporter(api_key=api_key, url=api_url)
-            pipeline.add_last(exporter.handler_factory())
+            pipeline.add_last("redis:exporter", exporter.handler_factory())
 
-        pipeline.add_last(RedisHandler())
+        pipeline.add_last("redis", RedisHandler())
 
     server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
@@ -111,15 +111,15 @@ async def _run_mqtt_server(*, host: str, port: int, api_key: str | None, api_url
     ip_rate_limiter = IpRateLimiter()
 
     def pipeline_initializer(pipeline: Pipeline) -> None:
-        pipeline.add_last(ip_rate_limiter.handler_factory())
-        pipeline.add_last(InboundIdleTimeoutHandler())
-        pipeline.add_last(MessageLoggingHandler())
+        pipeline.add_last("ip_rate_limit", ip_rate_limiter.handler_factory())
+        pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
+        pipeline.add_last("message_logging", MessageLoggingHandler())
 
         if api_key is not None:
             exporter = MqttConnectionExporter(api_key=api_key, url=api_url)
-            pipeline.add_last(exporter.handler_factory())
+            pipeline.add_last("mqtt:exporter", exporter.handler_factory())
 
-        pipeline.add_last(MqttHandler())
+        pipeline.add_last("mqtt", MqttHandler())
 
     server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 

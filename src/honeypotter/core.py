@@ -45,13 +45,15 @@ class Pipeline(ABC):
     def __init__(self) -> None:
         self.metadata: dict[str, Any] = {}
 
+        self._contexts: dict[str, HandlerContext] = {}
         self._head = HeadHandlerContext(self, Handler())
         self._tail = TailHandlerContext(self, Handler())
         self._head.next = self._tail
         self._tail.prev = self._head
 
-    def add_last(self, handler: Handler) -> None:
+    def add_last(self, name: str, handler: Handler) -> None:
         context = HandlerContext(self, handler)
+        self._contexts[name] = context
 
         self._tail.prev.next = context  # type: ignore[union-attr]
         context.prev = self._tail.prev

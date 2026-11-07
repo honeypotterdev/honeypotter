@@ -14,5 +14,5 @@ class DummyHandler(Handler):
 
 class ShellRecorder(Handler):
     def handler_added(self, context: HandlerContext) -> None:
-        context.pipeline.add_last(DummyHandler("Dummy #1"))
-        context.pipeline.add_last(DummyHandler("Dummy #2"))
+        context.pipeline.add_last("dummy1", DummyHandler("Dummy #1"))
+        context.pipeline.add_last("dummy2", DummyHandler("Dummy #2"))
