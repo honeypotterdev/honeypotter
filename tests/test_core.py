@@ -20,9 +20,9 @@ class ReverseHandler(Handler):
 class TestPipeline:
     def test(self) -> None:
         pipeline = StubPipeline()
-        pipeline.add_handler(UppercaseHandler())
-        pipeline.add_handler(WrapHandler())
-        pipeline.add_handler(ReverseHandler())
+        pipeline.add_last(UppercaseHandler())
+        pipeline.add_last(WrapHandler())
+        pipeline.add_last(ReverseHandler())
         pipeline.send_inbound(b"foo")
 
         assert pipeline.outbound_queue == [b"(OOF)"]

@@ -1,10 +1,9 @@
 import asyncio
 import logging
-from collections.abc import Callable
 
 import click
 
-from honeypotter.core import Handler
+from honeypotter.core import Pipeline
 from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, MessageLoggingHandler
 from honeypotter.mqtt.exporters import MqttConnectionExporter
 from honeypotter.mqtt.handlers import MqttHandler
@@ -47,24 +46,20 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
 
     ip_rate_limiter = IpRateLimiter()
 
-    handler_factories: list[Callable[..., Handler]] = [
-        ip_rate_limiter.handler_factory,
-        InboundIdleTimeoutHandler,
-        MessageLoggingHandler,
-        TelnetHandler,
-        LineDecoderHandler,
-        BusyboxShellHandler,
-    ]
+    def pipeline_initializer(pipeline: Pipeline) -> None:
+        pipeline.add_last(ip_rate_limiter.handler_factory())
+        pipeline.add_last(InboundIdleTimeoutHandler())
+        pipeline.add_last(MessageLoggingHandler())
+        pipeline.add_last(TelnetHandler())
+        pipeline.add_last(LineDecoderHandler())
 
-    if api_key is not None:
-        exporter = TelnetConnectionExporter(api_key=api_key, url=api_url)
-        handler_factories.insert(2, exporter.handler_factory)
+        if api_key is not None:
+            exporter = TelnetConnectionExporter(api_key=api_key, url=api_url)
+            pipeline.add_last(exporter.handler_factory())
 
-    _logger.debug("Handlers: %s", handler_factories)
+        pipeline.add_last(BusyboxShellHandler())
 
-    server = await loop.create_server(
-        TransportProtocolFactory(handler_factories=handler_factories), host=host, port=port
-    )
+    server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
     async with server:
         await server.serve_forever()
@@ -86,22 +81,18 @@ async def _run_redis_server(*, host: str, port: int, api_key: str | None, api_ur
 
     ip_rate_limiter = IpRateLimiter()
 
-    handler_factories: list[Callable[..., Handler]] = [
-        ip_rate_limiter.handler_factory,
-        InboundIdleTimeoutHandler,
-        MessageLoggingHandler,
-        RedisHandler,
-    ]
+    def pipeline_initializer(pipeline: Pipeline) -> None:
+        pipeline.add_last(ip_rate_limiter.handler_factory())
+        pipeline.add_last(InboundIdleTimeoutHandler())
+        pipeline.add_last(MessageLoggingHandler())
 
-    if api_key is not None:
-        exporter = RedisConnectionExporter(api_key=api_key, url=api_url)
-        handler_factories.insert(2, exporter.handler_factory)
+        if api_key is not None:
+            exporter = RedisConnectionExporter(api_key=api_key, url=api_url)
+            pipeline.add_last(exporter.handler_factory())
 
-    _logger.debug("Handlers: %s", handler_factories)
+        pipeline.add_last(RedisHandler())
 
-    server = await loop.create_server(
-        TransportProtocolFactory(handler_factories=handler_factories), host=host, port=port
-    )
+    server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
     async with server:
         await server.serve_forever()
@@ -123,22 +114,18 @@ async def _run_mqtt_server(*, host: str, port: int, api_key: str | None, api_url
 
     ip_rate_limiter = IpRateLimiter()
 
-    handler_factories: list[Callable[..., Handler]] = [
-        ip_rate_limiter.handler_factory,
-        InboundIdleTimeoutHandler,
-        MessageLoggingHandler,
-        MqttHandler,
-    ]
+    def pipeline_initializer(pipeline: Pipeline) -> None:
+        pipeline.add_last(ip_rate_limiter.handler_factory())
+        pipeline.add_last(InboundIdleTimeoutHandler())
+        pipeline.add_last(MessageLoggingHandler())
 
-    if api_key is not None:
-        exporter = MqttConnectionExporter(api_key=api_key, url=api_url)
-        handler_factories.insert(-1, exporter.handler_factory)
+        if api_key is not None:
+            exporter = MqttConnectionExporter(api_key=api_key, url=api_url)
+            pipeline.add_last(exporter.handler_factory())
 
-    _logger.debug("Handlers: %s", handler_factories)
+        pipeline.add_last(MqttHandler())
 
-    server = await loop.create_server(
-        TransportProtocolFactory(handler_factories=handler_factories), host=host, port=port
-    )
+    server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
     async with server:
         await server.serve_forever()

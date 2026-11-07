@@ -4,7 +4,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from honeypotter.core import Handler, Pipeline
+from honeypotter.core import Pipeline
 
 _logger = logging.getLogger(__name__)
 
@@ -48,8 +48,8 @@ class TransportPipeline(Pipeline):
 class TransportProtocol(asyncio.Protocol):
     pipeline: TransportPipeline
 
-    def __init__(self, handler_factories: list[Callable[..., Handler]]) -> None:
-        self._handler_factories = handler_factories
+    def __init__(self, pipeline_initializer: Callable[[Pipeline], None]) -> None:
+        self._pipeline_initializer = pipeline_initializer
 
     def connection_made(self, transport: asyncio.BaseTransport) -> None:
         assert isinstance(transport, asyncio.Transport)
@@ -58,8 +58,7 @@ class TransportProtocol(asyncio.Protocol):
         self.pipeline.metadata["sockname"] = transport.get_extra_info("sockname")
         self.pipeline.metadata["peername"] = transport.get_extra_info("peername")
 
-        for handler_factory in self._handler_factories:
-            self.pipeline.add_handler(handler_factory())
+        self._pipeline_initializer(self.pipeline)
 
         self.pipeline.send_inbound(ConnectionMadeEvent())
 
@@ -71,8 +70,8 @@ class TransportProtocol(asyncio.Protocol):
 
 
 class TransportProtocolFactory:
-    def __init__(self, handler_factories: list[Callable[..., Handler]]) -> None:
-        self._handler_factories = handler_factories
+    def __init__(self, pipeline_initializer: Callable[[Pipeline], None]) -> None:
+        self._pipeline_initializer = pipeline_initializer
 
     def __call__(self) -> TransportProtocol:
-        return TransportProtocol(handler_factories=self._handler_factories)
+        return TransportProtocol(pipeline_initializer=self._pipeline_initializer)

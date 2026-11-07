@@ -54,7 +54,7 @@ class Pipeline(ABC):
         self.head.next = self.tail
         self.tail.prev = self.head
 
-    def add_handler(self, handler: Handler) -> None:
+    def add_last(self, handler: Handler) -> None:
         context = HandlerContext(self, handler)
 
         self.tail.prev.next = context  # type: ignore[union-attr]
