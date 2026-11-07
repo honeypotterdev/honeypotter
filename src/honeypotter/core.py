@@ -46,8 +46,12 @@ class Pipeline(ABC):
         self.metadata: dict[str, Any] = {}
 
         self._contexts: dict[str, HandlerContext] = {}
+
         self._head = HeadHandlerContext(self, Handler())
+        self._contexts["head"] = self._head
         self._tail = TailHandlerContext(self, Handler())
+        self._contexts["tail"] = self._tail
+
         self._head.next = self._tail
         self._tail.prev = self._head
 
