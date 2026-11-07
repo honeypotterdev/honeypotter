@@ -45,21 +45,21 @@ class Pipeline(ABC):
     def __init__(self) -> None:
         self.metadata: dict[str, Any] = {}
 
-        self.head = HeadHandlerContext(self, Handler())
-        self.tail = TailHandlerContext(self, Handler())
-        self.head.next = self.tail
-        self.tail.prev = self.head
+        self._head = HeadHandlerContext(self, Handler())
+        self._tail = TailHandlerContext(self, Handler())
+        self._head.next = self._tail
+        self._tail.prev = self._head
 
     def add_last(self, handler: Handler) -> None:
         context = HandlerContext(self, handler)
 
-        self.tail.prev.next = context  # type: ignore[union-attr]
-        context.prev = self.tail.prev
-        self.tail.prev = context
-        context.next = self.tail
+        self._tail.prev.next = context  # type: ignore[union-attr]
+        context.prev = self._tail.prev
+        self._tail.prev = context
+        context.next = self._tail
 
     def send_inbound(self, event: Any) -> None:
-        self.head.send_inbound(event)
+        self._head.send_inbound(event)
 
     @abstractmethod
     def handle_outbound(self, event: Any) -> None: ...
