@@ -38,11 +38,7 @@ class HeadHandlerContext(HandlerContext):
 
 class TailHandlerContext(HandlerContext):
     def send_inbound(self, event: Any) -> None:
-        _logger.debug(
-            "Handler %s is at the top of the pipeline, dropping inbound event %s",
-            repr(self.handler.__class__.__name__),
-            repr(event),
-        )
+        _logger.debug("%s: dropping inbound event %s", str(self.__class__.__name__), repr(event))
 
 
 class Pipeline(ABC):
