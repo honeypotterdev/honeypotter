@@ -5,7 +5,8 @@ on:
   push:
     branches:
       - main
-  # TODO: Add schedule
+  schedule:
+    - cron: "51 4 * * *" # Every day, at 04:51 🤓
 
 permissions: {}
 
