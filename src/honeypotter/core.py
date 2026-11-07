@@ -58,6 +58,8 @@ class Pipeline(ABC):
         self._tail.prev = context
         context.next = self._tail
 
+        handler.handler_added(context)
+
     def send_inbound(self, event: Any) -> None:
         self._head.send_inbound(event)
 
@@ -71,3 +73,6 @@ class Handler:
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
         context.send_outbound(event)
+
+    def handler_added(self, context: HandlerContext) -> None:
+        pass

@@ -10,6 +10,7 @@ from honeypotter.mqtt.handlers import MqttHandler
 from honeypotter.redis.exporters import RedisConnectionExporter
 from honeypotter.redis.handlers import RedisHandler
 from honeypotter.shell.handlers import BusyboxShellHandler
+from honeypotter.shell.recorders import ShellRecorder
 from honeypotter.telnet.handlers import TelnetHandler
 from honeypotter.transport import TransportProtocolFactory
 
@@ -52,6 +53,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
         pipeline.add_last(TelnetHandler())
         pipeline.add_last(LineDecoderHandler())
         pipeline.add_last(BusyboxShellHandler())
+        pipeline.add_last(ShellRecorder())
 
     server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
