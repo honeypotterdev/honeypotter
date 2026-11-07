@@ -30,3 +30,4 @@ jobs:
         with:
           collect: all
           persona: auditor
+          advanced-security: false # TODO: Change to true after public release
