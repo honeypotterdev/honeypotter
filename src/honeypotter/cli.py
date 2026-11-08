@@ -4,6 +4,7 @@ import logging
 import click
 
 from honeypotter.core import Pipeline
+from honeypotter.exporters import JsonlExporter
 from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, MessageLoggingHandler
 from honeypotter.mqtt.exporters import MqttConnectionExporter
 from honeypotter.mqtt.handlers import MqttHandler
@@ -53,7 +54,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
         pipeline.add_last("telnet", TelnetHandler())
         pipeline.add_last("line_decoder", LineDecoderHandler())
         pipeline.add_last("busybox_shell", BusyboxShellHandler())
-        pipeline.add_last("shell_recorder", ShellRecorder(capture_messages_before="telnet"))
+        pipeline.add_last("shell_recorder", ShellRecorder(capture_messages_before="telnet", exporter=JsonlExporter()))
 
     server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 

@@ -3,9 +3,10 @@ import time
 from datetime import UTC, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field
 
 from honeypotter.core import Handler, HandlerContext
+from honeypotter.exporters import Exporter
 from honeypotter.shell.events import InputReceived, PasswordReceived, UsernameReceived
 from honeypotter.transport import ConnectionLostEvent, DataEvent
 
@@ -72,8 +73,9 @@ class EventTap(Handler):
 class ShellRecorder(Handler):
     _record: Record
 
-    def __init__(self, *, capture_messages_before: str) -> None:
+    def __init__(self, *, capture_messages_before: str, exporter: Exporter) -> None:
         self._capture_messages_before = capture_messages_before
+        self._exporter = exporter
         self._initial_time = time.monotonic()
 
     def handler_added(self, context: HandlerContext) -> None:
@@ -94,6 +96,6 @@ class ShellRecorder(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, ConnectionLostEvent):
-            _logger.info(f"Record: {self._record.model_dump_json()}")
+            self._exporter.export(self._record)
 
         context.send_inbound(event)
