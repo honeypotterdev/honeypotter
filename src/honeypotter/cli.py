@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import AsyncExitStack
 
 import click
 
@@ -34,35 +35,50 @@ def cli(verbose: int, sentry_dsn: str | None = None) -> None:
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
 @click.option("-p", "--port", type=int, default=23)
-@click.option("--api-key", type=str, envvar="HONEYPOTTER_API_KEY")
-@click.option("--api-url", type=str, default="https://api.honeypotter.dev/telnet-connection")
-def telnet(host: str, port: int, api_key: str | None, api_url: str) -> None:
-    asyncio.run(_run_telnet_server(host=host, port=port, api_key=api_key, api_url=api_url))
+@click.option("--export-url", type=str)
+def telnet(host: str, port: int, export_url: str | None) -> None:
+    asyncio.run(_run_telnet_server(host=host, port=port, export_url=export_url))
 
 
-async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_url: str) -> None:
+async def _run_telnet_server(*, host: str, port: int, export_url: str | None) -> None:
     loop = asyncio.get_running_loop()
 
     _logger.info("Starting server on %s:%s", host, port)
 
     ip_rate_limiter = IpRateLimiter()
-    exporter = HttpJsonExporter(
-        url="https://webhook.site/d5979061-f678-4942-911e-51b7d8fadedb", headers={"Authorization": "Bearer secret"}
-    )
 
-    def pipeline_initializer(pipeline: Pipeline) -> None:
-        pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
-        pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
-        pipeline.add_last("message_logging", MessageLoggingHandler())
-        pipeline.add_last("telnet", TelnetHandler())
-        pipeline.add_last("line_decoder", LineDecoderHandler())
-        pipeline.add_last("busybox_shell", BusyboxShellHandler())
-        pipeline.add_last("shell_recorder", ShellRecorder(capture_messages_before="telnet", exporter=exporter.export))
+    async with AsyncExitStack() as stack:
+        exporter = None
 
-    server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
+        if export_url is not None:
+            exporter = await stack.enter_async_context(
+                HttpJsonExporter(url=export_url, headers={"Authorization": "Bearer secret"})
+            )
 
-    async with server:
-        await server.serve_forever()
+        def pipeline_initializer(pipeline: Pipeline) -> None:
+            pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
+            pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
+            pipeline.add_last("message_logging", MessageLoggingHandler())
+            pipeline.add_last("telnet", TelnetHandler())
+            pipeline.add_last("line_decoder", LineDecoderHandler())
+            pipeline.add_last("busybox_shell", BusyboxShellHandler())
+
+            if exporter is not None:
+                pipeline.add_last(
+                    "shell_recorder", ShellRecorder(capture_messages_before="telnet", exporter=exporter.export)
+                )
+
+        server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
+        await stack.enter_async_context(server)
+
+        # The stack unwinds in reverse order: stop accepting, close clients,
+        # wait for their final records, then drain and close the exporter.
+        stack.callback(server.close_clients)
+        stack.callback(server.close)
+
+        # create_server() already accepts connections. Cancellation of this wait
+        # lets the stack close clients before the server waits for them to finish.
+        await asyncio.Event().wait()
 
 
 @cli.command()
