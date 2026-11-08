@@ -55,16 +55,26 @@ class Pipeline(ABC):
         self._head.next = self._tail
         self._tail.prev = self._head
 
+    def add_before(self, before: str, name: str, handler: Handler) -> None:
+        if name in self._contexts[name]:
+            raise RuntimeError(f"Handler {name!r} already registered in pipeline")
+
+        new_context = HandlerContext(self, handler)
+        self._contexts[name] = new_context
+
+        new_next = self._contexts[before]
+        new_prev = new_next.prev
+
+        new_next.prev = new_context
+        new_context.next = new_next
+
+        new_prev.next = new_context
+        new_context.prev = new_prev
+
+        handler.handler_added(new_context)
+
     def add_last(self, name: str, handler: Handler) -> None:
-        context = HandlerContext(self, handler)
-        self._contexts[name] = context
-
-        self._tail.prev.next = context  # type: ignore[union-attr]
-        context.prev = self._tail.prev
-        self._tail.prev = context
-        context.next = self._tail
-
-        handler.handler_added(context)
+        self.add_before("tail", name, handler)
 
     def send_inbound(self, event: Any) -> None:
         self._head.send_inbound(event)
