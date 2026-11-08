@@ -4,7 +4,7 @@ import logging
 import click
 
 from honeypotter.core import Pipeline
-from honeypotter.exporters import JsonlExporter
+from honeypotter.exporters import HttpJsonExporter
 from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, MessageLoggingHandler
 from honeypotter.mqtt.exporters import MqttConnectionExporter
 from honeypotter.mqtt.handlers import MqttHandler
@@ -46,6 +46,9 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
     _logger.info("Starting server on %s:%s", host, port)
 
     ip_rate_limiter = IpRateLimiter()
+    exporter = HttpJsonExporter(
+        url="https://webhook.site/d5979061-f678-4942-911e-51b7d8fadedb", headers={"Authorization": "Bearer secret"}
+    )
 
     def pipeline_initializer(pipeline: Pipeline) -> None:
         pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
@@ -54,7 +57,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
         pipeline.add_last("telnet", TelnetHandler())
         pipeline.add_last("line_decoder", LineDecoderHandler())
         pipeline.add_last("busybox_shell", BusyboxShellHandler())
-        pipeline.add_last("shell_recorder", ShellRecorder(capture_messages_before="telnet", exporter=JsonlExporter()))
+        pipeline.add_last("shell_recorder", ShellRecorder(capture_messages_before="telnet", exporter=exporter.export))
 
     server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
