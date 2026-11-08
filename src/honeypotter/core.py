@@ -6,8 +6,9 @@ _logger = logging.getLogger(__name__)
 
 
 class HandlerContext:
-    def __init__(self, pipeline: Pipeline, handler: Handler) -> None:
+    def __init__(self, pipeline: Pipeline, name: str, handler: Handler) -> None:
         self._pipeline = pipeline
+        self.name = name
         self.handler = handler
         self.next: HandlerContext | None = None
         self.prev: HandlerContext | None = None
@@ -47,23 +48,27 @@ class Pipeline(ABC):
 
         self._contexts: dict[str, HandlerContext] = {}
 
-        self._head = HeadHandlerContext(self, Handler())
+        self._head = HeadHandlerContext(self, "head", Handler())
         self._contexts["head"] = self._head
-        self._tail = TailHandlerContext(self, Handler())
+        self._tail = TailHandlerContext(self, "tail", Handler())
         self._contexts["tail"] = self._tail
 
         self._head.next = self._tail
         self._tail.prev = self._head
 
     def add_before(self, before: str, name: str, handler: Handler) -> None:
+        if before == "head":
+            raise ValueError("Cannot add before 'head' handler")
+
         if name in self._contexts:
             raise RuntimeError(f"Handler {name!r} already registered in pipeline")
 
-        new_context = HandlerContext(self, handler)
+        new_context = HandlerContext(self, name, handler)
         self._contexts[name] = new_context
 
         new_next = self._contexts[before]
         new_prev = new_next.prev
+        assert new_prev is not None
 
         new_next.prev = new_context
         new_context.next = new_next
@@ -74,22 +79,13 @@ class Pipeline(ABC):
         handler.handler_added(new_context)
 
     def add_after(self, after: str, name: str, handler: Handler) -> None:
-        if name in self._contexts:
-            raise RuntimeError(f"Handler {name!r} already registered in pipeline")
+        if after == "tail":
+            raise ValueError("Cannot add after 'tail' handler")
 
-        new_context = HandlerContext(self, handler)
-        self._contexts[name] = new_context
+        new_next = self._contexts[after].next
+        assert new_next is not None
 
-        new_prev = self._contexts[after]
-        new_next = new_prev.next
-
-        new_next.prev = new_context
-        new_context.next = new_next
-
-        new_prev.next = new_context
-        new_context.prev = new_prev
-
-        handler.handler_added(new_context)
+        self.add_before(new_next.name, name, handler)
 
     def add_last(self, name: str, handler: Handler) -> None:
         self.add_before("tail", name, handler)
