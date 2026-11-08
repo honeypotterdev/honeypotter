@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from typing import Self
 
 from httpx import AsyncClient
 from pydantic import BaseModel
@@ -27,15 +28,36 @@ class HttpJsonExporter:
         self._headers["User-Agent"] = f"honeypotter/{__version__}"
 
         self._client = AsyncClient(headers=headers)
-        self._queue = asyncio.Queue[BaseModel]()
+        self._queue = asyncio.Queue[BaseModel | None]()
         self._worker_task = asyncio.create_task(self._worker())
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, exc_type, exc, traceback) -> None:
+        await self.aclose()
 
     def export(self, model: BaseModel):
         self._queue.put_nowait(model)
 
+    async def aclose(self) -> None:
+        self._queue.put_nowait(None)
+
+        _logger.debug("Closing exporter...")
+
+        try:
+            await asyncio.wait_for(self._worker_task, timeout=5.0)
+        except TimeoutError:
+            _logger.warning("Exporter drain timed out; abandoning remaining records")
+        finally:
+            await self._client.aclose()
+
     async def _worker(self) -> None:
         while True:
             model = await self._queue.get()
+
+            if model is None:
+                return
 
             try:
                 await self._export(model)
