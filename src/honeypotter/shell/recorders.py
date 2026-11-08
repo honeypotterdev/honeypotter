@@ -13,16 +13,12 @@ _logger = logging.getLogger(__name__)
 
 
 class Message(BaseModel):
-    model_config = ConfigDict(ser_json_bytes="base64")
-
     direction: Literal["inbound", "outbound"]
     offset: float
     data: bytes
 
 
 class Record(BaseModel):
-    model_config = ConfigDict(ser_json_bytes="base64")
-
     honeypot_ip: str
     honeypot_port: int
     client_ip: str
