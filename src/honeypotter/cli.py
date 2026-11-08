@@ -32,15 +32,31 @@ def cli(verbose: int, sentry_dsn: str | None = None) -> None:
         sentry_sdk.init(dsn=sentry_dsn, enable_logs=True)
 
 
+def _parse_export_headers(ctx: click.Context, param: click.Parameter, values: tuple[str, ...]) -> dict[str, str]:
+    headers: dict[str, str] = {}
+
+    for raw in values:
+        name, separator, value = raw.partition(":")
+        if not separator:
+            raise click.BadParameter("Expected 'Name: value'.", ctx=ctx, param=param)
+
+        headers[name.lower()] = value.strip()
+
+    return headers
+
+
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
 @click.option("-p", "--port", type=int, default=23)
 @click.option("--export-url", type=str)
-def telnet(host: str, port: int, export_url: str | None) -> None:
-    asyncio.run(_run_telnet_server(host=host, port=port, export_url=export_url))
+@click.option(
+    "--export-header", "export_headers", type=str, multiple=True, callback=_parse_export_headers, metavar="NAME:VALUE"
+)
+def telnet(host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+    asyncio.run(_run_telnet_server(host=host, port=port, export_url=export_url, export_headers=export_headers))
 
 
-async def _run_telnet_server(*, host: str, port: int, export_url: str | None) -> None:
+async def _run_telnet_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
     loop = asyncio.get_running_loop()
 
     _logger.info("Starting server on %s:%s", host, port)
@@ -51,9 +67,7 @@ async def _run_telnet_server(*, host: str, port: int, export_url: str | None) ->
         exporter = None
 
         if export_url is not None:
-            exporter = await stack.enter_async_context(
-                HttpJsonExporter(url=export_url, headers={"Authorization": "Bearer secret"})
-            )
+            exporter = await stack.enter_async_context(HttpJsonExporter(url=export_url, headers=export_headers))
 
         def pipeline_initializer(pipeline: Pipeline) -> None:
             pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
