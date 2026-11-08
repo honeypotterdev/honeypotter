@@ -13,6 +13,9 @@ class DummyHandler(Handler):
 
 
 class ShellRecorder(Handler):
+    def __init__(self, *, wrap: str) -> None:
+        self._wrap = wrap
+
     def handler_added(self, context: HandlerContext) -> None:
-        context.pipeline.add_last("dummy1", DummyHandler("Dummy #1"))
-        context.pipeline.add_last("dummy2", DummyHandler("Dummy #2"))
+        context.pipeline.add_before(self._wrap, "dummy1", DummyHandler("Dummy #1"))
+        context.pipeline.add_after(self._wrap, "dummy2", DummyHandler("Dummy #2"))

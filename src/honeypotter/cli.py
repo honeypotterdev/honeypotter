@@ -53,7 +53,7 @@ async def _run_telnet_server(*, host: str, port: int, api_key: str | None, api_u
         pipeline.add_last("telnet", TelnetHandler())
         pipeline.add_last("line_decoder", LineDecoderHandler())
         pipeline.add_last("busybox_shell", BusyboxShellHandler())
-        pipeline.add_last("shell_recorder", ShellRecorder())
+        pipeline.add_last("shell_recorder", ShellRecorder(wrap="busybox_shell"))
 
     server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
 
