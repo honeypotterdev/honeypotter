@@ -1,7 +1,9 @@
 import logging
 import time
-from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Literal
+
+from pydantic import BaseModel, Field, ConfigDict
 
 from honeypotter.core import Handler, HandlerContext
 from honeypotter.shell.events import InputReceived, PasswordReceived, UsernameReceived
@@ -10,21 +12,36 @@ from honeypotter.transport import ConnectionLostEvent, DataEvent
 _logger = logging.getLogger(__name__)
 
 
-@dataclass(kw_only=True)
-class Message:
+class Message(BaseModel):
+    model_config = ConfigDict(ser_json_bytes="base64")
+
     direction: Literal["inbound", "outbound"]
     offset: float
     data: bytes
 
 
+class Record(BaseModel):
+    model_config = ConfigDict(ser_json_bytes="base64")
+
+    honeypot_ip: str
+    honeypot_port: int
+    client_ip: str
+    client_port: int
+    username: bytes | None = None
+    password: bytes | None = None
+    shell_inputs: list[bytes] = Field(default_factory=list)
+    messages: list[Message] = Field(default_factory=list)
+    created_at: datetime
+
+
 class MessagesTap(Handler):
-    def __init__(self, initial_time: float, messages: list[Message]) -> None:
+    def __init__(self, initial_time: float, record: Record) -> None:
         self._initial_time = initial_time
-        self._messages = messages
+        self._record = record
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
-            self._messages.append(
+            self._record.messages.append(
                 Message(direction="inbound", offset=time.monotonic() - self._initial_time, data=event.data)
             )
 
@@ -32,7 +49,7 @@ class MessagesTap(Handler):
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, DataEvent):
-            self._messages.append(
+            self._record.messages.append(
                 Message(direction="outbound", offset=time.monotonic() - self._initial_time, data=event.data)
             )
 
@@ -40,40 +57,47 @@ class MessagesTap(Handler):
 
 
 class EventTap(Handler):
-    def __init__(self, events) -> None:
-        self._events = events
+    def __init__(self, record: Record) -> None:
+        self._record = record
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, UsernameReceived):
-            self._events.append(event)
+            self._record.username = event.username
 
         if isinstance(event, PasswordReceived):
-            self._events.append(event)
+            self._record.password = event.password
 
         if isinstance(event, InputReceived):
-            self._events.append(event)
+            self._record.shell_inputs.append(event.input)
 
         context.send_inbound(event)
 
 
 class ShellRecorder(Handler):
+    _record: Record
+
     def __init__(self, *, capture_messages_before: str) -> None:
         self._capture_messages_before = capture_messages_before
         self._initial_time = time.monotonic()
-        self._messages = []
-        self._events = []
 
     def handler_added(self, context: HandlerContext) -> None:
+        self._record = Record(
+            honeypot_ip=context.pipeline.metadata["sockname"][0],
+            honeypot_port=context.pipeline.metadata["sockname"][1],
+            client_ip=context.pipeline.metadata["peername"][0],
+            client_port=context.pipeline.metadata["peername"][1],
+            created_at=datetime.now(tz=UTC),
+        )
+
         context.pipeline.add_before(
             self._capture_messages_before,
             f"{context.name}:message_tap",
-            MessagesTap(self._initial_time, self._messages),
+            MessagesTap(self._initial_time, self._record),
         )
-        context.pipeline.add_after(context.name, f"{context.name}:event_tap", EventTap(self._events))
+        context.pipeline.add_after(context.name, f"{context.name}:event_tap", EventTap(self._record))
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         if isinstance(event, ConnectionLostEvent):
-            _logger.info(f"Messages: {self._messages}")
-            _logger.info(f"Events: {self._events}")
+            _logger.info(f"Record: {self._record.model_dump_json()}")
 
         context.send_inbound(event)
