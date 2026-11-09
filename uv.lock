@@ -225,6 +225,7 @@ dependencies = [
     { name = "click" },
     { name = "httpx" },
     { name = "pydantic" },
+    { name = "pydantic-core" },
     { name = "sentry-sdk" },
 ]
 
@@ -244,6 +245,7 @@ requires-dist = [
     { name = "click", specifier = ">=8.5.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "pydantic", specifier = ">=2.13.5" },
+    { name = "pydantic-core", specifier = ">=2.50.4" },
     { name = "sentry-sdk", specifier = ">=2.71.0" },
 ]
 

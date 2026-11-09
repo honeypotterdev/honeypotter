@@ -6,8 +6,9 @@ _logger = logging.getLogger(__name__)
 
 
 class HandlerContext:
-    def __init__(self, pipeline: Pipeline, handler: Handler) -> None:
+    def __init__(self, pipeline: Pipeline, name: str, handler: Handler) -> None:
         self._pipeline = pipeline
+        self.name = name
         self.handler = handler
         self.next: HandlerContext | None = None
         self.prev: HandlerContext | None = None
@@ -38,40 +39,73 @@ class HeadHandlerContext(HandlerContext):
 
 class TailHandlerContext(HandlerContext):
     def send_inbound(self, event: Any) -> None:
-        _logger.debug(
-            "Handler %s is at the top of the pipeline, dropping inbound event %s",
-            repr(self.handler.__class__.__name__),
-            repr(event),
-        )
+        _logger.debug("%s: dropping inbound event %s", str(self.__class__.__name__), repr(event))
 
 
 class Pipeline(ABC):
     def __init__(self) -> None:
         self.metadata: dict[str, Any] = {}
 
-        self.head = HeadHandlerContext(self, Handler())
-        self.tail = TailHandlerContext(self, Handler())
-        self.head.next = self.tail
-        self.tail.prev = self.head
+        self._contexts: dict[str, HandlerContext] = {}
 
-    def add_handler(self, handler: Handler) -> None:
-        context = HandlerContext(self, handler)
+        self._head = HeadHandlerContext(self, "head", Handler())
+        self._contexts["head"] = self._head
+        self._tail = TailHandlerContext(self, "tail", Handler())
+        self._contexts["tail"] = self._tail
 
-        self.tail.prev.next = context  # type: ignore[union-attr]
-        context.prev = self.tail.prev
-        self.tail.prev = context
-        context.next = self.tail
+        self._head.next = self._tail
+        self._tail.prev = self._head
+
+    def add_before(self, before: str, name: str, handler: Handler) -> None:
+        if before == "head":
+            raise ValueError("Cannot add before 'head' handler")
+
+        if name in self._contexts:
+            raise RuntimeError(f"Handler {name!r} already registered in pipeline")
+
+        new_context = HandlerContext(self, name, handler)
+        self._contexts[name] = new_context
+
+        new_next = self._contexts[before]
+        new_prev = new_next.prev
+        assert new_prev is not None
+
+        new_next.prev = new_context
+        new_context.next = new_next
+
+        new_prev.next = new_context
+        new_context.prev = new_prev
+
+        handler.handler_added(new_context)
+
+    def add_after(self, after: str, name: str, handler: Handler) -> None:
+        if after == "tail":
+            raise ValueError("Cannot add after 'tail' handler")
+
+        new_next = self._contexts[after].next
+        assert new_next is not None
+
+        self.add_before(new_next.name, name, handler)
+
+    def add_last(self, name: str, handler: Handler) -> None:
+        self.add_before("tail", name, handler)
+
+    def add_first(self, name: str, handler: Handler) -> None:
+        self.add_after("head", name, handler)
 
     def send_inbound(self, event: Any) -> None:
-        self.head.send_inbound(event)
+        self._head.send_inbound(event)
 
     @abstractmethod
     def handle_outbound(self, event: Any) -> None: ...
 
 
-class Handler(ABC):
+class Handler:
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         context.send_inbound(event)
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
         context.send_outbound(event)
+
+    def handler_added(self, context: HandlerContext) -> None:
+        pass
