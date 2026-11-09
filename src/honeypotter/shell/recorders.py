@@ -13,6 +13,11 @@ from honeypotter.transport import ConnectionLostEvent, DataEvent
 _logger = logging.getLogger(__name__)
 
 
+class Peer(BaseModel):
+    ip: str
+    port: int
+
+
 class Message(BaseModel):
     direction: Literal["inbound", "outbound"]
     offset: float
@@ -20,10 +25,8 @@ class Message(BaseModel):
 
 
 class Record(BaseModel):
-    honeypot_ip: str
-    honeypot_port: int
-    client_ip: str
-    client_port: int
+    honeypot: Peer
+    client: Peer
     username: bytes | None = None
     password: bytes | None = None
     shell_inputs: list[bytes] = Field(default_factory=list)
@@ -80,10 +83,8 @@ class ShellRecorder(Handler):
 
     def handler_added(self, context: HandlerContext) -> None:
         self._record = Record(
-            honeypot_ip=context.pipeline.metadata["sockname"][0],
-            honeypot_port=context.pipeline.metadata["sockname"][1],
-            client_ip=context.pipeline.metadata["peername"][0],
-            client_port=context.pipeline.metadata["peername"][1],
+            honeypot=Peer(ip=context.pipeline.metadata["sockname"][0], port=context.pipeline.metadata["sockname"][1]),
+            client=Peer(ip=context.pipeline.metadata["peername"][0], port=context.pipeline.metadata["peername"][1]),
             created_at=datetime.now(tz=UTC),
         )
 
