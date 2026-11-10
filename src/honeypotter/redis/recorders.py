@@ -2,26 +2,16 @@ import logging
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from honeypotter.core import Handler, HandlerContext
+from honeypotter.recorders import Message, MessagesTap, Peer
 from honeypotter.redis.events import ArrayReceived, BulkStringReceived
-from honeypotter.transport import ConnectionLostEvent, DataEvent
+from honeypotter.transport import ConnectionLostEvent
 
 _logger = logging.getLogger(__name__)
-
-
-class Peer(BaseModel):
-    ip: str
-    port: int
-
-
-class Message(BaseModel):
-    direction: Literal["inbound", "outbound"]
-    offset: float
-    data: bytes
 
 
 class Record(BaseModel):
@@ -30,28 +20,6 @@ class Record(BaseModel):
     commands: list[bytes] = Field(default_factory=list)
     messages: list[Message] = Field(default_factory=list)
     created_at: datetime
-
-
-class MessagesTap(Handler):
-    def __init__(self, initial_time: float, record: Record) -> None:
-        self._initial_time = initial_time
-        self._record = record
-
-    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, DataEvent):
-            self._record.messages.append(
-                Message(direction="inbound", offset=time.monotonic() - self._initial_time, data=event.data)
-            )
-
-        context.send_inbound(event)
-
-    def handle_outbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, DataEvent):
-            self._record.messages.append(
-                Message(direction="outbound", offset=time.monotonic() - self._initial_time, data=event.data)
-            )
-
-        context.send_outbound(event)
 
 
 class EventTap(Handler):
@@ -89,7 +57,7 @@ class RedisRecorder(Handler):
         context.pipeline.add_before(
             self._capture_messages_before,
             f"{context.name}:message_tap",
-            MessagesTap(self._initial_time, self._record),
+            MessagesTap(self._initial_time, self._record.messages),
         )
         context.pipeline.add_after(context.name, f"{context.name}:event_tap", EventTap(self._record))
 
