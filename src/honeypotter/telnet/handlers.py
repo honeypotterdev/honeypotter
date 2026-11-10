@@ -61,3 +61,5 @@ class TelnetHandler(Handler):
                 context.send_outbound(CloseConnection())
             case ApplicationDataReceived(data=data):
                 context.send_inbound(DataReceived(data=data))
+            case _:
+                context.send_inbound(event)
