@@ -1,9 +1,9 @@
 from unittest.mock import MagicMock, call
 
+from honeypotter.commands import WriteData
 from honeypotter.core import HandlerContext
-from honeypotter.handlers import LineEvent
+from honeypotter.events import ConnectionOpened, LineReceived
 from honeypotter.shell.handlers import BusyboxShellHandler
-from honeypotter.transport import ConnectionMadeEvent, DataEvent
 
 
 class TestBusyboxShellHandler:
@@ -12,14 +12,14 @@ class TestBusyboxShellHandler:
 
         handler = BusyboxShellHandler()
 
-        handler.handle_inbound(context, ConnectionMadeEvent())
-        handler.handle_inbound(context, LineEvent(b"john"))
-        handler.handle_inbound(context, LineEvent(b"secret"))
-        handler.handle_inbound(context, LineEvent(b"enable"))
+        handler.handle_inbound(context, ConnectionOpened())
+        handler.handle_inbound(context, LineReceived(line=b"john"))
+        handler.handle_inbound(context, LineReceived(line=b"secret"))
+        handler.handle_inbound(context, LineReceived(line=b"enable"))
 
         assert context.send_outbound.call_args_list == [
-            call(DataEvent(data=b"login: ")),
-            call(DataEvent(data=b"password: ")),
-            call(DataEvent(data=b"/ # ")),
-            call(DataEvent(data=b"sh: enable: not found\n/ # ")),
+            call(WriteData(data=b"login: ")),
+            call(WriteData(data=b"password: ")),
+            call(WriteData(data=b"/ # ")),
+            call(WriteData(data=b"sh: enable: not found\n/ # ")),
         ]

@@ -1,10 +1,11 @@
 import logging
 from typing import Any
 
+from honeypotter.commands import CloseConnection, WriteData
 from honeypotter.core import Handler, HandlerContext
+from honeypotter.events import DataReceived
 from honeypotter.mqtt.connection import MqttConnection
 from honeypotter.mqtt.events import ConnectReceived, DisconnectReceived, Event, PublishReceived, SubscribeReceived
-from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
 
@@ -17,12 +18,12 @@ class MqttHandler(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
-            case DataEvent():
-                self._handle_data_event(context, event)
+            case DataReceived():
+                self._handle_data_received(context, event)
             case _:
-                super().handle_inbound(context, event)
+                context.send_inbound(event)
 
-    def _handle_data_event(self, context: HandlerContext, event: DataEvent) -> None:
+    def _handle_data_received(self, context: HandlerContext, event: DataReceived) -> None:
         events = self._connection.receive_data(event.data)
 
         _logger.debug(f"Received events: {events!r}")
@@ -36,27 +37,27 @@ class MqttHandler(Handler):
         match event:
             case ConnectReceived():
                 self._connection.send_conn_ack_packet()
-                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
+                context.send_outbound(WriteData(data=self._connection.data_to_send()))
             case DisconnectReceived():
-                context.send_outbound(DisconnectRequestEvent())
+                context.send_outbound(CloseConnection())
             case PublishReceived(qos=0):
                 pass
             case PublishReceived(message_identifier=message_identifier):
                 assert message_identifier is not None
 
                 self._connection.send_pub_ack_packet(message_identifier=message_identifier)
-                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
+                context.send_outbound(WriteData(data=self._connection.data_to_send()))
             case SubscribeReceived():
                 self._handle_subscribe_event(context, event)
             case _:
-                context.send_outbound(DisconnectRequestEvent())
+                context.send_outbound(CloseConnection())
 
     def _handle_subscribe_event(self, context: HandlerContext, event: SubscribeReceived) -> None:
         self._connection.send_sub_ack_packet(
             message_identifier=event.message_identifier,
             return_codes=[subscription.qos for subscription in event.subscriptions],
         )
-        context.send_outbound(DataEvent(data=self._connection.data_to_send()))
+        context.send_outbound(WriteData(data=self._connection.data_to_send()))
 
         for subscription in event.subscriptions:
             if subscription.topic_filter == "$SYS/#":
@@ -123,4 +124,4 @@ class MqttHandler(Handler):
 
         for topic_name, message in output:
             self._connection.send_publish_packet(topic_name=topic_name, message=message, retain=True)
-            context.send_outbound(DataEvent(data=self._connection.data_to_send()))
+            context.send_outbound(WriteData(data=self._connection.data_to_send()))

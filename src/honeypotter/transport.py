@@ -1,32 +1,13 @@
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Any
 
+from honeypotter.commands import CloseConnection, WriteData
 from honeypotter.core import Pipeline
+from honeypotter.events import ConnectionClosed, ConnectionOpened, DataReceived
 
 _logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ConnectionMadeEvent:
-    pass
-
-
-@dataclass
-class ConnectionLostEvent:
-    reason: Exception | None = None
-
-
-@dataclass(frozen=True)
-class DataEvent:
-    data: bytes
-
-
-@dataclass
-class DisconnectRequestEvent:
-    pass
 
 
 class TransportPipeline(Pipeline):
@@ -36,11 +17,11 @@ class TransportPipeline(Pipeline):
         self._transport = transport
 
     def handle_outbound(self, event: Any) -> None:
-        if isinstance(event, DataEvent):
+        if isinstance(event, WriteData):
             self._transport.write(event.data)
             return
 
-        if isinstance(event, DisconnectRequestEvent):
+        if isinstance(event, CloseConnection):
             self._transport.close()
             return
 
@@ -60,13 +41,13 @@ class TransportProtocol(asyncio.Protocol):
 
         self._pipeline_initializer(self.pipeline)
 
-        self.pipeline.send_inbound(ConnectionMadeEvent())
+        self.pipeline.send_inbound(ConnectionOpened())
 
     def data_received(self, data: bytes) -> None:
-        self.pipeline.send_inbound(DataEvent(data=data))
+        self.pipeline.send_inbound(DataReceived(data=data))
 
     def connection_lost(self, exc: Exception | None) -> None:
-        self.pipeline.send_inbound(ConnectionLostEvent(reason=exc))
+        self.pipeline.send_inbound(ConnectionClosed(reason=exc))
 
 
 class TransportProtocolFactory:

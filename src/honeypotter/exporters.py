@@ -21,7 +21,7 @@ class JsonlExporter:
 
 
 class HttpJsonExporter:
-    def __init__(self, *, url: str, headers: dict | None = None) -> None:
+    def __init__(self, *, url: str, headers: dict[str, str] | None = None) -> None:
         self._url = url
         self._headers = headers or {}
         self._headers["Content-Type"] = "application/json"
@@ -37,7 +37,7 @@ class HttpJsonExporter:
     async def __aexit__(self, exc_type, exc, traceback) -> None:
         await self.aclose()
 
-    def export(self, model: BaseModel):
+    def export(self, model: BaseModel) -> None:
         self._queue.put_nowait(model)
 
     async def aclose(self) -> None:

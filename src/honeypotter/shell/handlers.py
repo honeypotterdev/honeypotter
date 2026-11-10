@@ -2,11 +2,11 @@ import logging
 from enum import Enum, auto
 from typing import Any
 
+from honeypotter.commands import WriteData
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.handlers import LineEvent
+from honeypotter.events import ConnectionOpened, LineReceived
 from honeypotter.shell.emulators import BusyboxEmulator
 from honeypotter.shell.events import InputReceived, PasswordReceived, UsernameReceived
-from honeypotter.transport import ConnectionMadeEvent, DataEvent
 
 _logger = logging.getLogger(__name__)
 
@@ -26,28 +26,28 @@ class BusyboxShellHandler(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
-            case ConnectionMadeEvent():
-                self._handle_connection_made(context)
-            case LineEvent():
+            case ConnectionOpened():
+                self._handle_connection_opened(context)
+            case LineReceived():
                 self._handle_line(context, event)
             case _:
                 super().handle_inbound(context, event)
 
-    def _handle_connection_made(self, context: HandlerContext) -> None:
-        context.send_outbound(DataEvent(data=b"login: "))
+    def _handle_connection_opened(self, context: HandlerContext) -> None:
+        context.send_outbound(WriteData(data=b"login: "))
 
-    def _handle_line(self, context: HandlerContext, event: LineEvent) -> None:
+    def _handle_line(self, context: HandlerContext, event: LineReceived) -> None:
         if self._state == State.WAITING_FOR_USERNAME:
             self._state = State.WAITING_FOR_PASSWORD
             context.send_inbound(UsernameReceived(username=event.line))
-            context.send_outbound(DataEvent(data=b"password: "))
+            context.send_outbound(WriteData(data=b"password: "))
             return
 
         if self._state == State.WAITING_FOR_PASSWORD:
             self._state = State.OPEN
             context.send_inbound(PasswordReceived(password=event.line))
-            context.send_outbound(DataEvent(data=self._emulator.execute_line()))
+            context.send_outbound(WriteData(data=self._emulator.execute_line()))
             return
 
         context.send_inbound(InputReceived(input=event.line))
-        context.send_outbound(DataEvent(data=self._emulator.execute_line(event.line)))
+        context.send_outbound(WriteData(data=self._emulator.execute_line(event.line)))

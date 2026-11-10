@@ -1,11 +1,11 @@
 import asyncio
 import logging
-from dataclasses import dataclass
 from typing import Any, Literal
 
+from honeypotter.commands import CloseConnection, WriteData
 from honeypotter.constants import CR, LF
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.transport import ConnectionLostEvent, ConnectionMadeEvent, DataEvent, DisconnectRequestEvent
+from honeypotter.events import ConnectionClosed, ConnectionOpened, DataReceived, LineReceived
 from honeypotter.utils import RateLimiter
 
 _logger = logging.getLogger(__name__)
@@ -20,12 +20,12 @@ class InboundIdleTimeoutHandler(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
-            case ConnectionLostEvent():
+            case ConnectionClosed():
                 self._cancel_timeout_callback()
             case _:
                 self._reset_timeout_callback(context)
 
-        super().handle_inbound(context, event)
+        context.send_inbound(event)
 
     def _reset_timeout_callback(self, context: HandlerContext) -> None:
         self._cancel_timeout_callback()
@@ -36,7 +36,7 @@ class InboundIdleTimeoutHandler(Handler):
             self._timeout_handle.cancel()
 
     def _timeout_callback(self, context: HandlerContext) -> None:
-        context.send_outbound(DisconnectRequestEvent())
+        context.send_outbound(CloseConnection())
 
 
 class MessageLoggingHandler(Handler):
@@ -47,20 +47,20 @@ class MessageLoggingHandler(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
-            case DataEvent():
+            case DataReceived():
                 self._messages.append(("inbound", event.data))
-            case ConnectionLostEvent():
-                self._handle_connection_lost(context)
+            case ConnectionClosed():
+                self._handle_connection_closed(context)
 
-        super().handle_inbound(context, event)
+        context.send_inbound(event)
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, DataEvent):
+        if isinstance(event, WriteData):
             self._messages.append(("outbound", event.data))
 
-        super().handle_outbound(context, event)
+        context.send_outbound(event)
 
-    def _handle_connection_lost(self, context: HandlerContext) -> None:
+    def _handle_connection_closed(self, context: HandlerContext) -> None:
         _logger.debug(
             "Connection lost. Metadata: %s, Messages: %s", repr(context.pipeline.metadata), repr(self._messages)
         )
@@ -86,24 +86,19 @@ class IpRateLimiterHandler(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
-            case ConnectionMadeEvent():
-                self._handle_connection_made(context, event)
+            case ConnectionOpened():
+                self._handle_connection_opened(context, event)
             case _:
-                super().handle_inbound(context, event)
+                context.send_inbound(event)
 
-    def _handle_connection_made(self, context: HandlerContext, event: ConnectionMadeEvent) -> None:
+    def _handle_connection_opened(self, context: HandlerContext, event: ConnectionOpened) -> None:
         client_ip = context.pipeline.metadata["peername"][0]
 
         if self._rate_limiter.is_allowed(client_ip):
             context.send_inbound(event)
         else:
             _logger.debug("Rate limit reached for %s", client_ip)
-            context.send_outbound(DisconnectRequestEvent())
-
-
-@dataclass(frozen=True)
-class LineEvent:
-    line: bytes
+            context.send_outbound(CloseConnection())
 
 
 class LineDecoderHandler(Handler):
@@ -113,8 +108,8 @@ class LineDecoderHandler(Handler):
         self._buffer = bytearray()
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if not isinstance(event, DataEvent):
-            super().handle_inbound(context, event)
+        if not isinstance(event, DataReceived):
+            context.send_inbound(event)
             return
 
         for byte in event.data:
@@ -122,5 +117,5 @@ class LineDecoderHandler(Handler):
                 self._buffer.append(byte)
                 continue
 
-            context.send_inbound(LineEvent(line=bytes(self._buffer)))
+            context.send_inbound(LineReceived(line=bytes(self._buffer)))
             self._buffer.clear()
