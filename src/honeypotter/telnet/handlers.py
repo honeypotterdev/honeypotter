@@ -26,16 +26,29 @@ class TelnetHandler(Handler):
             case DataReceived():
                 self._handle_data_received(context, event)
             case _:
-                super().handle_inbound(context, event)
+                context.send_inbound(event)
+
+    def handle_outbound(self, context: HandlerContext, event: Any) -> None:
+        match event:
+            case WriteData(data=data):
+                self._connection.send_application_data(data)
+                self._send_pending_data(context)
+            case _:
+                context.send_outbound(event)
+
+    def _send_pending_data(self, context: HandlerContext) -> None:
+        if data := self._connection.data_to_send():
+            context.send_outbound(WriteData(data=data))
 
     def _send_negotiation_options(self, context: HandlerContext) -> None:
         self._connection.request_option(Option.ECHO, side=Side.LOCAL, enable=True)
         self._connection.request_option(Option.SGA, side=Side.LOCAL, enable=True)
         self._connection.request_option(Option.SGA, side=Side.REMOTE, enable=True)
-        context.send_outbound(WriteData(data=self._connection.data_to_send()))
+        self._send_pending_data(context)
 
     def _handle_data_received(self, context: HandlerContext, event: DataReceived) -> None:
         events = self._connection.receive_data(event.data)
+        self._send_pending_data(context)
 
         _logger.debug(f"Received events: {events!r}")
 
