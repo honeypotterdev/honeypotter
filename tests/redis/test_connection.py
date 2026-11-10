@@ -1,13 +1,8 @@
 import pytest
 
 from honeypotter.redis.connection import RedisConnection
-from honeypotter.redis.events import (
-    ArrayReceived,
-    BulkStringReceived,
-    ConnectionFailed,
-    NullBulkStringReceived,
-    SimpleStringReceived,
-)
+from honeypotter.redis.events import ConnectionFailed, ValueReceived
+from honeypotter.redis.types import Array, BulkString, NullBulkString, SimpleString
 
 
 class TestRedisConnection:
@@ -31,53 +26,58 @@ class TestRedisConnection:
         assert connection.data_to_send() == b"$3\r\nfoo\r\n"
 
     def test_receive_data_simple_string(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"+OK\r\n") == [SimpleStringReceived(string=b"OK")]
+        assert connection.receive_data(b"+OK\r\n") == [ValueReceived(value=SimpleString(string=b"OK"))]
 
     def test_receive_data_simple_string_empty(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"+\r\n") == [SimpleStringReceived(string=b"")]
+        assert connection.receive_data(b"+\r\n") == [ValueReceived(value=SimpleString(string=b""))]
 
     def test_receive_data_simple_string_unexpected_line_feed(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+foo\nbar\r\n") == [ConnectionFailed()]
 
     def test_receive_data_bulk_string(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"$5\r\nhello\r\n") == [BulkStringReceived(string=b"hello")]
+        assert connection.receive_data(b"$5\r\nhello\r\n") == [ValueReceived(value=BulkString(string=b"hello"))]
 
     def test_receive_data_null_bulk_string(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"$-1\r\n") == [NullBulkStringReceived()]
+        assert connection.receive_data(b"$-1\r\n") == [ValueReceived(value=NullBulkString())]
 
     def test_receive_data_array(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"*2\r\n+hello\r\n$5\r\nworld\r\n") == [
-            ArrayReceived(array=[SimpleStringReceived(string=b"hello"), BulkStringReceived(string=b"world")])
+            ValueReceived(value=Array(array=[SimpleString(string=b"hello"), BulkString(string=b"world")]))
         ]
 
     def test_receive_data_array_empty(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"*0\r\n") == [ArrayReceived(array=[])]
+        assert connection.receive_data(b"*0\r\n") == [ValueReceived(value=Array(array=[]))]
 
     def test_receive_data_inline_command_without_arguments(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"INFO\r\n") == [ArrayReceived(array=[BulkStringReceived(string=b"INFO")])]
+        assert connection.receive_data(b"INFO\r\n") == [ValueReceived(value=Array(array=[BulkString(string=b"INFO")]))]
 
     def test_receive_data_inline_command_with_arguments(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"SET foo bar\r\n") == [
-            ArrayReceived(
-                array=[
-                    BulkStringReceived(string=b"SET"),
-                    BulkStringReceived(string=b"foo"),
-                    BulkStringReceived(string=b"bar"),
-                ]
+            ValueReceived(
+                value=Array(
+                    array=[
+                        BulkString(string=b"SET"),
+                        BulkString(string=b"foo"),
+                        BulkString(string=b"bar"),
+                    ]
+                )
             )
         ]
 
     def test_receive_data_inline_command_with_quoted_argument(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"GET 'foo bar'\r\n") == [
-            ArrayReceived(array=[BulkStringReceived(string=b"GET"), BulkStringReceived(string=b"foo bar")])
+            ValueReceived(value=Array(array=[BulkString(string=b"GET"), BulkString(string=b"foo bar")]))
         ]
 
     def test_receive_data_inline_command_accepts_lf_and_crlf(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"INFO\n") == [ArrayReceived(array=[BulkStringReceived(string=b"INFO")])]
-        assert connection.receive_data(b"INFO\r\n") == [ArrayReceived(array=[BulkStringReceived(string=b"INFO")])]
+        assert connection.receive_data(b"INFO\n") == [ValueReceived(value=Array(array=[BulkString(string=b"INFO")]))]
+        assert connection.receive_data(b"INFO\r\n") == [ValueReceived(value=Array(array=[BulkString(string=b"INFO")]))]
 
     def test_receive_data_error_after_event(self, connection: RedisConnection) -> None:
-        assert connection.receive_data(b"+OK\r\n+OK\n") == [SimpleStringReceived(string=b"OK"), ConnectionFailed()]
+        assert connection.receive_data(b"+OK\r\n+OK\n") == [
+            ValueReceived(value=SimpleString(string=b"OK")),
+            ConnectionFailed(),
+        ]
 
     def test_receive_data_no_events_after_error(self, connection: RedisConnection) -> None:
         assert connection.receive_data(b"+OK\n") == [ConnectionFailed()]

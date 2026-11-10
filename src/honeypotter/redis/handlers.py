@@ -5,13 +5,8 @@ from honeypotter.commands import CloseConnection, WriteData
 from honeypotter.core import Handler, HandlerContext
 from honeypotter.events import DataReceived
 from honeypotter.redis.connection import RedisConnection
-from honeypotter.redis.events import (
-    ArrayReceived,
-    BulkStringReceived,
-    Event,
-    NullBulkStringReceived,
-    SimpleStringReceived,
-)
+from honeypotter.redis.events import Event, ValueReceived
+from honeypotter.redis.types import Array, BulkString, NullBulkString, SimpleString
 from honeypotter.redis.utils import InfoProvider
 
 _logger = logging.getLogger(__name__)
@@ -43,7 +38,7 @@ class RedisHandler(Handler):
         context.send_inbound(event)
 
         match event:
-            case ArrayReceived(array=[BulkStringReceived(string=command), *args]):
+            case ValueReceived(value=Array(array=[BulkString(string=command), *args])):
                 self._handle_command(context, command, args)
             case _:
                 self._connection.send_simple_error(b"ERR unknown error")
@@ -54,7 +49,7 @@ class RedisHandler(Handler):
         self,
         context: HandlerContext,
         command: bytes,
-        args: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived],
+        args: list[SimpleString | BulkString | NullBulkString],
     ) -> None:
         match command.upper(), args:
             case b"QUIT", *_:
@@ -67,7 +62,7 @@ class RedisHandler(Handler):
             case b"INFO", []:
                 info = _info_provider.generate_info().encode("utf-8")
                 self._connection.send_bulk_string(info)
-            case b"SET", [BulkStringReceived(string=_), BulkStringReceived(string=_)]:
+            case b"SET", [BulkString(string=_), BulkString(string=_)]:
                 self._connection.send_simple_string(b"OK")
             case _:
                 self._connection.send_simple_error(b"ERR unknown command '" + command + b"'")
