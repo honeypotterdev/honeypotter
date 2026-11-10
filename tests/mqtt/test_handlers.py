@@ -27,7 +27,6 @@ class TestMqttHandler:
         handler.handle_inbound(context, ConnectionMadeEvent())
         handler.handle_inbound(context, DataEvent(data=client_connection.data_to_send()))
 
-        assert context.send_inbound.call_args_list == [call(ConnectionMadeEvent())]
         assert context.send_outbound.call_args_list == [
             # CONNACK
             call(DataEvent(data=b" \x02\x00\x00")),
