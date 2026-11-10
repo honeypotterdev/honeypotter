@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Callable
 from contextlib import AsyncExitStack
 
 import click
@@ -19,19 +20,6 @@ from honeypotter.transport import TransportProtocolFactory
 _logger = logging.getLogger(__name__)
 
 
-@click.group()
-@click.option("-v", "--verbose", count=True)
-@click.option("--sentry-dsn", type=str, envvar="SENTRY_DSN")
-def cli(verbose: int, sentry_dsn: str | None = None) -> None:
-    logging.basicConfig(level=logging.INFO, format="{levelname} {asctime} {name}:{lineno} {message}", style="{")
-    logging.getLogger("honeypotter").setLevel(logging.DEBUG if verbose else logging.INFO)
-
-    if sentry_dsn is not None:
-        import sentry_sdk
-
-        sentry_sdk.init(dsn=sentry_dsn, enable_logs=True)
-
-
 def _parse_export_headers(ctx: click.Context, param: click.Parameter, values: tuple[str, ...]) -> dict[str, str]:
     headers: dict[str, str] = {}
 
@@ -43,6 +31,47 @@ def _parse_export_headers(ctx: click.Context, param: click.Parameter, values: tu
         headers[name.lower()] = value.strip()
 
     return headers
+
+
+async def _run_server(
+    *, stack: AsyncExitStack, host: str, port: int, pipeline_initializer: Callable[[Pipeline], None]
+) -> None:
+    loop = asyncio.get_running_loop()
+
+    _logger.info("Starting server on %s:%s", host, port)
+
+    ip_rate_limiter = IpRateLimiter()
+
+    def initialize(pipeline: Pipeline) -> None:
+        pipeline_initializer(pipeline)
+        pipeline.add_first("message_logging", MessageLoggingHandler())
+        pipeline.add_first("inbound_idle_timeout", InboundIdleTimeoutHandler())
+        pipeline.add_first("ip_rate_limiter", ip_rate_limiter.handler_factory())
+
+    server = await loop.create_server(TransportProtocolFactory(initialize), host=host, port=port)
+    await stack.enter_async_context(server)
+
+    # The stack unwinds in reverse order: stop accepting, close clients,
+    # wait for their final records, then drain and close the exporter.
+    stack.callback(server.close_clients)
+    stack.callback(server.close)
+
+    # create_server() already accepts connections. Cancellation of this wait
+    # lets the stack close clients before the server waits for them to finish.
+    await asyncio.Event().wait()
+
+
+@click.group()
+@click.option("-v", "--verbose", count=True)
+@click.option("--sentry-dsn", type=str, envvar="SENTRY_DSN")
+def cli(verbose: int, sentry_dsn: str | None = None) -> None:
+    logging.basicConfig(level=logging.INFO, format="{levelname} {asctime} {name}:{lineno} {message}", style="{")
+    logging.getLogger("honeypotter").setLevel(logging.DEBUG if verbose else logging.INFO)
+
+    if sentry_dsn is not None:
+        import sentry_sdk
+
+        sentry_sdk.init(dsn=sentry_dsn, enable_logs=True)
 
 
 @cli.command()
@@ -57,12 +86,6 @@ def telnet(host: str, port: int, export_url: str | None, export_headers: dict[st
 
 
 async def _run_telnet_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
-    loop = asyncio.get_running_loop()
-
-    _logger.info("Starting server on %s:%s", host, port)
-
-    ip_rate_limiter = IpRateLimiter()
-
     async with AsyncExitStack() as stack:
         exporter = None
 
@@ -70,9 +93,6 @@ async def _run_telnet_server(*, host: str, port: int, export_url: str | None, ex
             exporter = await stack.enter_async_context(HttpJsonExporter(url=export_url, headers=export_headers))
 
         def pipeline_initializer(pipeline: Pipeline) -> None:
-            pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
-            pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
-            pipeline.add_last("message_logging", MessageLoggingHandler())
             pipeline.add_last("telnet", TelnetHandler())
             pipeline.add_last("line_decoder", LineDecoderHandler())
             pipeline.add_last("busybox_shell", BusyboxShellHandler())
@@ -82,17 +102,7 @@ async def _run_telnet_server(*, host: str, port: int, export_url: str | None, ex
                     "shell_recorder", ShellRecorder(capture_messages_before="telnet", exporter=exporter.export)
                 )
 
-        server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
-        await stack.enter_async_context(server)
-
-        # The stack unwinds in reverse order: stop accepting, close clients,
-        # wait for their final records, then drain and close the exporter.
-        stack.callback(server.close_clients)
-        stack.callback(server.close)
-
-        # create_server() already accepts connections. Cancellation of this wait
-        # lets the stack close clients before the server waits for them to finish.
-        await asyncio.Event().wait()
+        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
 
 
 @cli.command()
@@ -107,12 +117,6 @@ def redis(host: str, port: int, export_url: str | None, export_headers: dict[str
 
 
 async def _run_redis_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
-    loop = asyncio.get_running_loop()
-
-    _logger.info("Starting server on %s:%s", host, port)
-
-    ip_rate_limiter = IpRateLimiter()
-
     async with AsyncExitStack() as stack:
         exporter = None
 
@@ -120,9 +124,6 @@ async def _run_redis_server(*, host: str, port: int, export_url: str | None, exp
             exporter = await stack.enter_async_context(HttpJsonExporter(url=export_url, headers=export_headers))
 
         def pipeline_initializer(pipeline: Pipeline) -> None:
-            pipeline.add_last("ip_rate_limiter", ip_rate_limiter.handler_factory())
-            pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
-            pipeline.add_last("message_logging", MessageLoggingHandler())
             pipeline.add_last("redis", RedisHandler())
 
             if exporter is not None:
@@ -130,17 +131,7 @@ async def _run_redis_server(*, host: str, port: int, export_url: str | None, exp
                     "redis_recorder", RedisRecorder(capture_messages_before="redis", exporter=exporter.export)
                 )
 
-        server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
-        await stack.enter_async_context(server)
-
-        # The stack unwinds in reverse order: stop accepting, close clients,
-        # wait for their final records, then drain and close the exporter.
-        stack.callback(server.close_clients)
-        stack.callback(server.close)
-
-        # create_server() already accepts connections. Cancellation of this wait
-        # lets the stack close clients before the server waits for them to finish.
-        await asyncio.Event().wait()
+        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
 
 
 @cli.command()
@@ -155,12 +146,6 @@ def mqtt(host: str, port: int, export_url: str | None, export_headers: dict[str,
 
 
 async def _run_mqtt_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
-    loop = asyncio.get_running_loop()
-
-    _logger.info("Starting server on %s:%s", host, port)
-
-    ip_rate_limiter = IpRateLimiter()
-
     async with AsyncExitStack() as stack:
         exporter = None
 
@@ -168,9 +153,6 @@ async def _run_mqtt_server(*, host: str, port: int, export_url: str | None, expo
             exporter = await stack.enter_async_context(HttpJsonExporter(url=export_url, headers=export_headers))
 
         def pipeline_initializer(pipeline: Pipeline) -> None:
-            pipeline.add_last("ip_rate_limit", ip_rate_limiter.handler_factory())
-            pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
-            pipeline.add_last("message_logging", MessageLoggingHandler())
             pipeline.add_last("mqtt", MqttHandler())
 
             if exporter is not None:
@@ -178,14 +160,4 @@ async def _run_mqtt_server(*, host: str, port: int, export_url: str | None, expo
                     "mqtt_recorder", MqttRecorder(capture_messages_before="mqtt", exporter=exporter.export)
                 )
 
-        server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
-        await stack.enter_async_context(server)
-
-        # The stack unwinds in reverse order: stop accepting, close clients,
-        # wait for their final records, then drain and close the exporter.
-        stack.callback(server.close_clients)
-        stack.callback(server.close)
-
-        # create_server() already accepts connections. Cancellation of this wait
-        # lets the stack close clients before the server waits for them to finish.
-        await asyncio.Event().wait()
+        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
