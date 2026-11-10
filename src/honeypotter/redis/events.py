@@ -1,29 +1,15 @@
-from collections.abc import Sequence
 from dataclasses import dataclass
+
+from honeypotter.redis.types import Value
 
 
 class Event:
     pass
 
 
-@dataclass(kw_only=True)
-class SimpleStringReceived(Event):
-    string: bytes
-
-
-@dataclass(kw_only=True)
-class BulkStringReceived(Event):
-    string: bytes
-
-
-@dataclass(kw_only=True)
-class NullBulkStringReceived(Event):
-    pass
-
-
-@dataclass(kw_only=True)
-class ArrayReceived(Event):
-    array: Sequence[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived]
+@dataclass(frozen=True, kw_only=True)
+class ValueReceived(Event):
+    value: Value
 
 
 @dataclass(kw_only=True)

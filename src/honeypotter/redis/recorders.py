@@ -9,7 +9,8 @@ from pydantic import BaseModel, Field
 from honeypotter.core import Handler, HandlerContext
 from honeypotter.events import ConnectionClosed
 from honeypotter.recorders import Message, MessagesTap, Peer
-from honeypotter.redis.events import ArrayReceived, BulkStringReceived
+from honeypotter.redis.events import ValueReceived
+from honeypotter.redis.types import Array, BulkString
 
 _logger = logging.getLogger(__name__)
 
@@ -27,13 +28,13 @@ class EventTap(Handler):
         self._record = record
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, ArrayReceived):
-            self._handle_array_received(event)
+        if isinstance(event, ValueReceived) and isinstance(event.value, Array):
+            self._handle_array(event.value)
 
         context.send_inbound(event)
 
-    def _handle_array_received(self, event: ArrayReceived) -> None:
-        strings = [element.string for element in event.array if isinstance(element, BulkStringReceived)]
+    def _handle_array(self, value: Array) -> None:
+        strings = [element.string for element in value.array if isinstance(element, BulkString)]
 
         if strings:
             self._record.commands.append(b" ".join(strings))

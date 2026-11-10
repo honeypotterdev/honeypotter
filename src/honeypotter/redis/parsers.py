@@ -3,13 +3,7 @@ from enum import Enum, auto
 from typing import cast
 
 from honeypotter.constants import ASTERISK, CR, DOLLAR, LF, MINUS, NINE, ONE, PLUS, ZERO
-from honeypotter.redis.events import (
-    ArrayReceived,
-    BulkStringReceived,
-    Event,
-    NullBulkStringReceived,
-    SimpleStringReceived,
-)
+from honeypotter.redis.types import Array, BulkString, NullBulkString, SimpleString, Value
 from honeypotter.statemachine import Machine, MachineError, Transition
 
 
@@ -42,7 +36,7 @@ class RespParser:
         self._buffer = bytearray()
         self._bulk_string_bytes_remaining = 0
         self._array_items_remaining = 0
-        self._array_buffer: list[SimpleStringReceived | BulkStringReceived | NullBulkStringReceived] = []
+        self._array_buffer: list[SimpleString | BulkString | NullBulkString] = []
 
         self._machine = Machine(
             model=self,
@@ -146,9 +140,9 @@ class RespParser:
             ],
         )
 
-    def feed_byte(self, byte: int) -> Event | None:
+    def feed_byte(self, byte: int) -> Value | None:
         try:
-            return cast(Event | None, self._machine.trigger("byte", byte))
+            return cast(Value | None, self._machine.trigger("byte", byte))
         except MachineError as e:
             error = RespParseError("Machine error occurred", state=self._machine.state, byte=byte)
             self._machine.transition_to(State.FAILED)
@@ -184,8 +178,8 @@ class RespParser:
     def append_byte(self, byte: int) -> None:
         self._buffer.append(byte)
 
-    def finish_simple_string(self, byte: int) -> Event | None:
-        simple_string = SimpleStringReceived(string=bytes(self._buffer))
+    def finish_simple_string(self, byte: int) -> Value | None:
+        simple_string = SimpleString(string=bytes(self._buffer))
         self._buffer.clear()
 
         return self._accept_value(simple_string)
@@ -198,52 +192,52 @@ class RespParser:
         self._buffer.append(byte)
         self._bulk_string_bytes_remaining -= 1
 
-    def finish_bulk_string(self, byte: int) -> Event | None:
-        bulk_string = BulkStringReceived(string=bytes(self._buffer))
+    def finish_bulk_string(self, byte: int) -> Value | None:
+        bulk_string = BulkString(string=bytes(self._buffer))
         self._buffer.clear()
 
         return self._accept_value(bulk_string)
 
-    def parse_array_length(self, byte: int) -> Event | None:
+    def parse_array_length(self, byte: int) -> Value | None:
         self._array_items_remaining = int(self._buffer)
         self._buffer.clear()
 
         # Zero length array case
         if self._array_items_remaining == 0:
-            return ArrayReceived(array=[])
+            return Array(array=[])
 
         return None
 
-    def finish_null_bulk_string(self, byte: int) -> Event | None:
-        null_bull_string = NullBulkStringReceived()
+    def finish_null_bulk_string(self, byte: int) -> Value | None:
+        null_bulk_string = NullBulkString()
 
-        return self._accept_value(null_bull_string)
+        return self._accept_value(null_bulk_string)
 
     def reject_unexpected_lf(self, byte: int) -> None:
         raise RespParseError("Unexpected LF", state=self._machine.state, byte=byte)
 
-    def finish_inline_command(self, byte: int) -> Event:
+    def finish_inline_command(self, byte: int) -> Value:
         commands = bytes(self._buffer)
         self._buffer.clear()
 
         if commands.endswith(b"\r"):
             commands = commands[:-1]
 
-        strings = [BulkStringReceived(string=command.encode()) for command in shlex.split(commands.decode())]
+        strings = [BulkString(string=command.encode()) for command in shlex.split(commands.decode())]
 
-        return ArrayReceived(array=strings)
+        return Array(array=strings)
 
-    def _accept_value(self, event: SimpleStringReceived | BulkStringReceived | NullBulkStringReceived) -> Event | None:
+    def _accept_value(self, value: SimpleString | BulkString | NullBulkString) -> Value | None:
         if self._array_items_remaining == 0:
-            return event
+            return value
 
-        self._array_buffer.append(event)
+        self._array_buffer.append(value)
         self._array_items_remaining -= 1
 
         if self._array_items_remaining != 0:
             return None
 
-        array = ArrayReceived(array=self._array_buffer)
+        array = Array(array=self._array_buffer)
         self._array_buffer = []
 
         return array

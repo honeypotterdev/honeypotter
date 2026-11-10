@@ -1,4 +1,4 @@
-from honeypotter.redis.events import ConnectionFailed, Event
+from honeypotter.redis.events import ConnectionFailed, Event, ValueReceived
 from honeypotter.redis.parsers import RespParseError, RespParser
 
 
@@ -31,13 +31,13 @@ class RedisConnection:
 
         for byte in data:
             try:
-                event = self._parser.feed_byte(byte)
+                value = self._parser.feed_byte(byte)
             except RespParseError:
                 self._is_failed = True
                 events.append(ConnectionFailed())
                 return events
 
-            if event is not None:
-                events.append(event)
+            if value is not None:
+                events.append(ValueReceived(value=value))
 
         return events
