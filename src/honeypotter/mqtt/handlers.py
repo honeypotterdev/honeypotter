@@ -31,7 +31,7 @@ class MqttHandler(Handler):
             self._handle_connection_event(context, connection_event)
 
     def _handle_connection_event(self, context: HandlerContext, event: Event) -> None:
-        self._log_event(context, event)
+        context.send_inbound(event)
 
         match event:
             case ConnectReceived():
@@ -50,12 +50,6 @@ class MqttHandler(Handler):
                 self._handle_subscribe_event(context, event)
             case _:
                 context.send_outbound(DisconnectRequestEvent())
-
-    def _log_event(self, context: HandlerContext, event: Event) -> None:
-        if "mqtt.events" not in context.pipeline.metadata:
-            context.pipeline.metadata["mqtt.events"] = []
-
-        context.pipeline.metadata["mqtt.events"].append(event)
 
     def _handle_subscribe_event(self, context: HandlerContext, event: SubscribeReceived) -> None:
         self._connection.send_sub_ack_packet(
