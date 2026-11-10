@@ -35,7 +35,7 @@ def _parse_export_headers(ctx: click.Context, param: click.Parameter, values: tu
     return headers
 
 
-async def _run_server(
+async def _start_server(
     *, stack: AsyncExitStack, host: str, port: int, pipeline_initializer: Callable[[Pipeline], None]
 ) -> None:
     loop = asyncio.get_running_loop()
@@ -58,10 +58,6 @@ async def _run_server(
     stack.callback(server.close_clients)
     stack.callback(server.close)
 
-    # create_server() already accepts connections. Cancellation of this wait
-    # lets the stack close clients before the server waits for them to finish.
-    await asyncio.Event().wait()
-
 
 @click.group()
 @click.option("-v", "--verbose", count=True)
@@ -78,16 +74,18 @@ def cli(verbose: int, sentry_dsn: str | None = None) -> None:
 
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
-@click.option("-p", "--port", type=int, required=True)
+@click.option("-p", "--port", "ports", type=int, multiple=True, required=True)
 @click.option("--export-url", type=str)
 @click.option(
     "--export-header", "export_headers", type=str, multiple=True, callback=_parse_export_headers, metavar="NAME:VALUE"
 )
-def tcp(host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
-    asyncio.run(_run_tcp_server(host=host, port=port, export_url=export_url, export_headers=export_headers))
+def tcp(host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]) -> None:
+    asyncio.run(_run_tcp_servers(host=host, ports=ports, export_url=export_url, export_headers=export_headers))
 
 
-async def _run_tcp_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+async def _run_tcp_servers(
+    *, host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]
+) -> None:
     async with AsyncExitStack() as stack:
         exporter = None
 
@@ -100,21 +98,27 @@ async def _run_tcp_server(*, host: str, port: int, export_url: str | None, expor
             if exporter is not None:
                 pipeline.add_last("tcp_recorder", TcpRecorder(exporter=exporter.export))
 
-        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+        for port in ports:
+            await _start_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+
+        # All listeners are accepting connections; cancellation triggers stack cleanup.
+        await asyncio.Event().wait()
 
 
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
-@click.option("-p", "--port", type=int, default=23)
+@click.option("-p", "--port", "ports", type=int, multiple=True, default=(23,))
 @click.option("--export-url", type=str)
 @click.option(
     "--export-header", "export_headers", type=str, multiple=True, callback=_parse_export_headers, metavar="NAME:VALUE"
 )
-def telnet(host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
-    asyncio.run(_run_telnet_server(host=host, port=port, export_url=export_url, export_headers=export_headers))
+def telnet(host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]) -> None:
+    asyncio.run(_run_telnet_servers(host=host, ports=ports, export_url=export_url, export_headers=export_headers))
 
 
-async def _run_telnet_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+async def _run_telnet_servers(
+    *, host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]
+) -> None:
     async with AsyncExitStack() as stack:
         exporter = None
 
@@ -131,21 +135,27 @@ async def _run_telnet_server(*, host: str, port: int, export_url: str | None, ex
                     "shell_recorder", ShellRecorder(capture_messages_before="telnet", exporter=exporter.export)
                 )
 
-        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+        for port in ports:
+            await _start_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+
+        # All listeners are accepting connections; cancellation triggers stack cleanup.
+        await asyncio.Event().wait()
 
 
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
-@click.option("-p", "--port", type=int, default=6379)
+@click.option("-p", "--port", "ports", type=int, multiple=True, default=(6379,))
 @click.option("--export-url", type=str)
 @click.option(
     "--export-header", "export_headers", type=str, multiple=True, callback=_parse_export_headers, metavar="NAME:VALUE"
 )
-def redis(host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
-    asyncio.run(_run_redis_server(host=host, port=port, export_url=export_url, export_headers=export_headers))
+def redis(host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]) -> None:
+    asyncio.run(_run_redis_servers(host=host, ports=ports, export_url=export_url, export_headers=export_headers))
 
 
-async def _run_redis_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+async def _run_redis_servers(
+    *, host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]
+) -> None:
     async with AsyncExitStack() as stack:
         exporter = None
 
@@ -160,21 +170,27 @@ async def _run_redis_server(*, host: str, port: int, export_url: str | None, exp
                     "redis_recorder", RedisRecorder(capture_messages_before="redis", exporter=exporter.export)
                 )
 
-        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+        for port in ports:
+            await _start_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+
+        # All listeners are accepting connections; cancellation triggers stack cleanup.
+        await asyncio.Event().wait()
 
 
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
-@click.option("-p", "--port", type=int, default=1883)
+@click.option("-p", "--port", "ports", type=int, multiple=True, default=(1883,))
 @click.option("--export-url", type=str)
 @click.option(
     "--export-header", "export_headers", type=str, multiple=True, callback=_parse_export_headers, metavar="NAME:VALUE"
 )
-def mqtt(host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
-    asyncio.run(_run_mqtt_server(host=host, port=port, export_url=export_url, export_headers=export_headers))
+def mqtt(host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]) -> None:
+    asyncio.run(_run_mqtt_servers(host=host, ports=ports, export_url=export_url, export_headers=export_headers))
 
 
-async def _run_mqtt_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+async def _run_mqtt_servers(
+    *, host: str, ports: tuple[int, ...], export_url: str | None, export_headers: dict[str, str]
+) -> None:
     async with AsyncExitStack() as stack:
         exporter = None
 
@@ -189,4 +205,8 @@ async def _run_mqtt_server(*, host: str, port: int, export_url: str | None, expo
                     "mqtt_recorder", MqttRecorder(capture_messages_before="mqtt", exporter=exporter.export)
                 )
 
-        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+        for port in ports:
+            await _start_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
+
+        # All listeners are accepting connections; cancellation triggers stack cleanup.
+        await asyncio.Event().wait()
