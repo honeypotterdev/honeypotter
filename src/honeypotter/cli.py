@@ -7,8 +7,8 @@ import click
 from honeypotter.core import Pipeline
 from honeypotter.exporters import HttpJsonExporter
 from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, MessageLoggingHandler
-from honeypotter.mqtt.exporters import MqttConnectionExporter
 from honeypotter.mqtt.handlers import MqttHandler
+from honeypotter.mqtt.recorders import MqttRecorder
 from honeypotter.redis.handlers import RedisHandler
 from honeypotter.redis.recorders import RedisRecorder
 from honeypotter.shell.handlers import BusyboxShellHandler
@@ -146,31 +146,46 @@ async def _run_redis_server(*, host: str, port: int, export_url: str | None, exp
 @cli.command()
 @click.option("-h", "--host", type=str, default="0.0.0.0")
 @click.option("-p", "--port", type=int, default=1883)
-@click.option("--api-key", type=str, envvar="HONEYPOTTER_API_KEY")
-@click.option("--api-url", type=str, default="https://api.honeypotter.dev/mqtt-connection")
-def mqtt(host: str, port: int, api_key: str | None, api_url: str) -> None:
-    asyncio.run(_run_mqtt_server(host=host, port=port, api_key=api_key, api_url=api_url))
+@click.option("--export-url", type=str)
+@click.option(
+    "--export-header", "export_headers", type=str, multiple=True, callback=_parse_export_headers, metavar="NAME:VALUE"
+)
+def mqtt(host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+    asyncio.run(_run_mqtt_server(host=host, port=port, export_url=export_url, export_headers=export_headers))
 
 
-async def _run_mqtt_server(*, host: str, port: int, api_key: str | None, api_url: str) -> None:
+async def _run_mqtt_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
     loop = asyncio.get_running_loop()
 
     _logger.info("Starting server on %s:%s", host, port)
 
     ip_rate_limiter = IpRateLimiter()
 
-    def pipeline_initializer(pipeline: Pipeline) -> None:
-        pipeline.add_last("ip_rate_limit", ip_rate_limiter.handler_factory())
-        pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
-        pipeline.add_last("message_logging", MessageLoggingHandler())
+    async with AsyncExitStack() as stack:
+        exporter = None
 
-        if api_key is not None:
-            exporter = MqttConnectionExporter(api_key=api_key, url=api_url)
-            pipeline.add_last("mqtt:exporter", exporter.handler_factory())
+        if export_url is not None:
+            exporter = await stack.enter_async_context(HttpJsonExporter(url=export_url, headers=export_headers))
 
-        pipeline.add_last("mqtt", MqttHandler())
+        def pipeline_initializer(pipeline: Pipeline) -> None:
+            pipeline.add_last("ip_rate_limit", ip_rate_limiter.handler_factory())
+            pipeline.add_last("inbound_idle_timeout", InboundIdleTimeoutHandler())
+            pipeline.add_last("message_logging", MessageLoggingHandler())
+            pipeline.add_last("mqtt", MqttHandler())
 
-    server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
+            if exporter is not None:
+                pipeline.add_last(
+                    "mqtt_recorder", MqttRecorder(capture_messages_before="mqtt", exporter=exporter.export)
+                )
 
-    async with server:
-        await server.serve_forever()
+        server = await loop.create_server(TransportProtocolFactory(pipeline_initializer), host=host, port=port)
+        await stack.enter_async_context(server)
+
+        # The stack unwinds in reverse order: stop accepting, close clients,
+        # wait for their final records, then drain and close the exporter.
+        stack.callback(server.close_clients)
+        stack.callback(server.close)
+
+        # create_server() already accepts connections. Cancellation of this wait
+        # lets the stack close clients before the server waits for them to finish.
+        await asyncio.Event().wait()
