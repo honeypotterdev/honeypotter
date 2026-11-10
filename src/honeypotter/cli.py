@@ -73,7 +73,7 @@ def cli(verbose: int, sentry_dsn: str | None = None) -> None:
 
 
 @cli.command()
-@click.option("-h", "--host", type=str, default="0.0.0.0")
+@click.option("-h", "--host", type=str, default="127.0.0.1")
 @click.option("-p", "--port", "ports", type=int, multiple=True, required=True)
 @click.option("--export-url", type=str)
 @click.option(
@@ -106,7 +106,7 @@ async def _run_tcp_servers(
 
 
 @cli.command()
-@click.option("-h", "--host", type=str, default="0.0.0.0")
+@click.option("-h", "--host", type=str, default="127.0.0.1")
 @click.option("-p", "--port", "ports", type=int, multiple=True, default=(23,))
 @click.option("--export-url", type=str)
 @click.option(
@@ -143,7 +143,7 @@ async def _run_telnet_servers(
 
 
 @cli.command()
-@click.option("-h", "--host", type=str, default="0.0.0.0")
+@click.option("-h", "--host", type=str, default="127.0.0.1")
 @click.option("-p", "--port", "ports", type=int, multiple=True, default=(6379,))
 @click.option("--export-url", type=str)
 @click.option(
@@ -178,7 +178,7 @@ async def _run_redis_servers(
 
 
 @cli.command()
-@click.option("-h", "--host", type=str, default="0.0.0.0")
+@click.option("-h", "--host", type=str, default="127.0.0.1")
 @click.option("-p", "--port", "ports", type=int, multiple=True, default=(1883,))
 @click.option("--export-url", type=str)
 @click.option(
