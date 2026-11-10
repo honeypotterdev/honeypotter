@@ -1,12 +1,13 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
 from honeypotter.mqtt.types import Subscription
 
 
-class Event(BaseModel):
+class Event:
     pass
 
 
+@dataclass(frozen=True, kw_only=True)
 class ConnectReceived(Event):
     protocol_name: str = "MQTT"
     protocol_level: int = 4
@@ -21,6 +22,7 @@ class ConnectReceived(Event):
     password: bytes | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
 class PublishReceived(Event):
     dup: bool = False
     qos: int = 0
@@ -30,14 +32,17 @@ class PublishReceived(Event):
     message: bytes = b""
 
 
+@dataclass(frozen=True, kw_only=True)
 class SubscribeReceived(Event):
     message_identifier: int
     subscriptions: list[Subscription]
 
 
+@dataclass(frozen=True, kw_only=True)
 class DisconnectReceived(Event):
     pass
 
 
+@dataclass(frozen=True, kw_only=True)
 class ConnectionFailed(Event):
     pass
