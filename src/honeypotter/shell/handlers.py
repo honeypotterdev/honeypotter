@@ -31,7 +31,7 @@ class BusyboxShellHandler(Handler):
             case LineReceived():
                 self._handle_line(context, event)
             case _:
-                super().handle_inbound(context, event)
+                context.send_inbound(event)
 
     def _handle_connection_opened(self, context: HandlerContext) -> None:
         context.send_outbound(WriteData(data=b"login: "))
