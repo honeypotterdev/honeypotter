@@ -14,6 +14,8 @@ from honeypotter.redis.handlers import RedisHandler
 from honeypotter.redis.recorders import RedisRecorder
 from honeypotter.shell.handlers import BusyboxShellHandler
 from honeypotter.shell.recorders import ShellRecorder
+from honeypotter.tcp.handlers import TcpHandler
+from honeypotter.tcp.recorders import TcpRecorder
 from honeypotter.telnet.handlers import TelnetHandler
 from honeypotter.transport import TransportProtocolFactory
 
@@ -72,6 +74,33 @@ def cli(verbose: int, sentry_dsn: str | None = None) -> None:
         import sentry_sdk
 
         sentry_sdk.init(dsn=sentry_dsn, enable_logs=True)
+
+
+@cli.command()
+@click.option("-h", "--host", type=str, default="0.0.0.0")
+@click.option("-p", "--port", type=int, required=True)
+@click.option("--export-url", type=str)
+@click.option(
+    "--export-header", "export_headers", type=str, multiple=True, callback=_parse_export_headers, metavar="NAME:VALUE"
+)
+def tcp(host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+    asyncio.run(_run_tcp_server(host=host, port=port, export_url=export_url, export_headers=export_headers))
+
+
+async def _run_tcp_server(*, host: str, port: int, export_url: str | None, export_headers: dict[str, str]) -> None:
+    async with AsyncExitStack() as stack:
+        exporter = None
+
+        if export_url is not None:
+            exporter = await stack.enter_async_context(HttpJsonExporter(url=export_url, headers=export_headers))
+
+        def pipeline_initializer(pipeline: Pipeline) -> None:
+            pipeline.add_last("tcp", TcpHandler())
+
+            if exporter is not None:
+                pipeline.add_last("tcp_recorder", TcpRecorder(exporter=exporter.export))
+
+        await _run_server(stack=stack, host=host, port=port, pipeline_initializer=pipeline_initializer)
 
 
 @cli.command()
