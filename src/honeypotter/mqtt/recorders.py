@@ -7,9 +7,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from honeypotter.core import Handler, HandlerContext
+from honeypotter.events import ConnectionClosed
 from honeypotter.mqtt.events import ConnectReceived, DisconnectReceived, PublishReceived, SubscribeReceived
 from honeypotter.recorders import Message, MessagesTap, Peer
-from honeypotter.transport import ConnectionLostEvent
 
 _logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class MqttRecorder(Handler):
         context.pipeline.add_after(context.name, f"{context.name}:event_tap", EventTap(self._record))
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, ConnectionLostEvent):
+        if isinstance(event, ConnectionClosed):
             self._exporter(self._record)
 
         context.send_inbound(event)

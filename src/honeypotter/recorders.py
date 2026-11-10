@@ -3,8 +3,9 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
+from honeypotter.commands import WriteData
 from honeypotter.core import Handler, HandlerContext
-from honeypotter.transport import DataEvent
+from honeypotter.events import DataReceived
 
 
 class Peer(BaseModel):
@@ -24,7 +25,7 @@ class MessagesTap(Handler):
         self._messages = messages
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, DataEvent):
+        if isinstance(event, DataReceived):
             self._messages.append(
                 Message(direction="inbound", offset=time.monotonic() - self._initial_time, data=event.data)
             )
@@ -32,7 +33,7 @@ class MessagesTap(Handler):
         context.send_inbound(event)
 
     def handle_outbound(self, context: HandlerContext, event: Any) -> None:
-        if isinstance(event, DataEvent):
+        if isinstance(event, WriteData):
             self._messages.append(
                 Message(direction="outbound", offset=time.monotonic() - self._initial_time, data=event.data)
             )

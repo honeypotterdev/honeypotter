@@ -1,7 +1,9 @@
 import logging
 from typing import Any
 
+from honeypotter.commands import CloseConnection, WriteData
 from honeypotter.core import Handler, HandlerContext
+from honeypotter.events import DataReceived
 from honeypotter.redis.connection import RedisConnection
 from honeypotter.redis.events import (
     ArrayReceived,
@@ -11,7 +13,6 @@ from honeypotter.redis.events import (
     SimpleStringReceived,
 )
 from honeypotter.redis.utils import InfoProvider
-from honeypotter.transport import DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
 _info_provider = InfoProvider()
@@ -25,12 +26,12 @@ class RedisHandler(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
-            case DataEvent():
-                self._handle_data_event(context, event)
+            case DataReceived():
+                self._handle_data_received(context, event)
             case _:
                 context.send_inbound(event)
 
-    def _handle_data_event(self, context: HandlerContext, event: DataEvent) -> None:
+    def _handle_data_received(self, context: HandlerContext, event: DataReceived) -> None:
         events = self._connection.receive_data(event.data)
 
         _logger.debug(f"Received events: {events!r}")
@@ -46,8 +47,8 @@ class RedisHandler(Handler):
                 self._handle_command(context, command, args)
             case _:
                 self._connection.send_simple_error(b"ERR unknown error")
-                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
-                context.send_outbound(DisconnectRequestEvent())
+                context.send_outbound(WriteData(data=self._connection.data_to_send()))
+                context.send_outbound(CloseConnection())
 
     def _handle_command(
         self,
@@ -58,8 +59,8 @@ class RedisHandler(Handler):
         match command.upper(), args:
             case b"QUIT", *_:
                 self._connection.send_simple_string(b"OK")
-                context.send_outbound(DataEvent(data=self._connection.data_to_send()))
-                context.send_outbound(DisconnectRequestEvent())
+                context.send_outbound(WriteData(data=self._connection.data_to_send()))
+                context.send_outbound(CloseConnection())
                 return
             case b"PING", []:
                 self._connection.send_simple_string(b"PONG")
@@ -72,4 +73,4 @@ class RedisHandler(Handler):
                 self._connection.send_simple_error(b"ERR unknown command '" + command + b"'")
 
         if data_to_send := self._connection.data_to_send():
-            context.send_outbound(DataEvent(data=data_to_send))
+            context.send_outbound(WriteData(data=data_to_send))

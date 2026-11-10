@@ -1,11 +1,12 @@
 import logging
 from typing import Any
 
+from honeypotter.commands import CloseConnection, WriteData
 from honeypotter.core import Handler, HandlerContext
+from honeypotter.events import ConnectionOpened, DataReceived
 from honeypotter.telnet.connection import TelnetConnection
 from honeypotter.telnet.events import ApplicationDataReceived, ConnectionFailed, Event
 from honeypotter.telnet.types import Option, Side
-from honeypotter.transport import ConnectionMadeEvent, DataEvent, DisconnectRequestEvent
 
 _logger = logging.getLogger(__name__)
 
@@ -19,11 +20,11 @@ class TelnetHandler(Handler):
 
     def handle_inbound(self, context: HandlerContext, event: Any) -> None:
         match event:
-            case ConnectionMadeEvent() as event:
+            case ConnectionOpened() as event:
                 self._send_negotiation_options(context)
                 context.send_inbound(event)
-            case DataEvent():
-                self._handle_data_event(context, event)
+            case DataReceived():
+                self._handle_data_received(context, event)
             case _:
                 super().handle_inbound(context, event)
 
@@ -31,9 +32,9 @@ class TelnetHandler(Handler):
         self._connection.request_option(Option.ECHO, side=Side.LOCAL, enable=True)
         self._connection.request_option(Option.SGA, side=Side.LOCAL, enable=True)
         self._connection.request_option(Option.SGA, side=Side.REMOTE, enable=True)
-        context.send_outbound(DataEvent(data=self._connection.data_to_send()))
+        context.send_outbound(WriteData(data=self._connection.data_to_send()))
 
-    def _handle_data_event(self, context: HandlerContext, event: DataEvent) -> None:
+    def _handle_data_received(self, context: HandlerContext, event: DataReceived) -> None:
         events = self._connection.receive_data(event.data)
 
         _logger.debug(f"Received events: {events!r}")
@@ -44,6 +45,6 @@ class TelnetHandler(Handler):
     def _handle_connection_event(self, context: HandlerContext, event: Event) -> None:
         match event:
             case ConnectionFailed():
-                context.send_outbound(DisconnectRequestEvent())
+                context.send_outbound(CloseConnection())
             case ApplicationDataReceived(data=data):
-                context.send_inbound(DataEvent(data=data))
+                context.send_inbound(DataReceived(data=data))
