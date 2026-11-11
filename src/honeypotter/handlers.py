@@ -39,6 +39,78 @@ class InboundIdleTimeoutHandler(Handler):
         context.send_outbound(CloseConnection())
 
 
+class MaxSessionDurationHandler(Handler):
+    """Close a connection after a fixed duration, regardless of inbound or outbound activity."""
+
+    def __init__(self, max_duration: float = 600) -> None:
+        super().__init__()
+
+        self._max_duration = max_duration
+        self._loop = asyncio.get_event_loop()
+        self._timeout_handle: asyncio.TimerHandle | None = None
+
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
+        match event:
+            case ConnectionOpened():
+                self._start_timeout_callback(context)
+            case ConnectionClosed():
+                self._cancel_timeout_callback()
+
+        context.send_inbound(event)
+
+    def _start_timeout_callback(self, context: HandlerContext) -> None:
+        if self._timeout_handle is None:
+            self._timeout_handle = self._loop.call_later(self._max_duration, self._timeout_callback, context)
+
+    def _cancel_timeout_callback(self) -> None:
+        if self._timeout_handle is not None:
+            self._timeout_handle.cancel()
+            self._timeout_handle = None
+
+    def _timeout_callback(self, context: HandlerContext) -> None:
+        context.send_outbound(CloseConnection())
+
+
+class MaxSessionSizeHandler(Handler):
+    """Close a connection when combined inbound and outbound data exceeds the limit."""
+
+    def __init__(self, max_size: int = 1024 * 10) -> None:
+        super().__init__()
+
+        self._max_size = max_size
+        self._session_size = 0
+
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
+        match event:
+            case DataReceived():
+                self._handle_data_received(context, event)
+            case _:
+                context.send_inbound(event)
+
+    def handle_outbound(self, context: HandlerContext, event: Any) -> None:
+        match event:
+            case WriteData():
+                self._handle_write_data(context, event)
+            case _:
+                context.send_outbound(event)
+
+    def _handle_data_received(self, context: HandlerContext, event: DataReceived) -> None:
+        self._session_size += len(event.data)
+        if self._session_size > self._max_size:
+            context.send_outbound(CloseConnection())
+            return
+
+        context.send_inbound(event)
+
+    def _handle_write_data(self, context: HandlerContext, event: WriteData) -> None:
+        self._session_size += len(event.data)
+        if self._session_size > self._max_size:
+            context.send_outbound(CloseConnection())
+            return
+
+        context.send_outbound(event)
+
+
 class MessageLoggingHandler(Handler):
     def __init__(self) -> None:
         super().__init__()
