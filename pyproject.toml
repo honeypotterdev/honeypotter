@@ -1,10 +1,30 @@
 [project]
 name = "honeypotter"
 version = "0.1.49"
-description = "Add your description here"
+description = "An experimental Python honeypot for Telnet, Redis, MQTT, and raw TCP"
 readme = "README.md"
 authors = [
     { name = "Vlad Dmitrievich", email = "2tunnels@proton.me" }
+]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["honeypot", "security", "networking", "telnet", "redis", "mqtt"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Internet",
+    "Topic :: Security",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Networking :: Monitoring",
+    "Topic :: Terminals :: Telnet",
 ]
 requires-python = ">=3.14.3"
 dependencies = [
@@ -28,6 +48,11 @@ dev = [
 
 [project.scripts]
 honeypotter = "honeypotter.cli:cli"
+
+[project.urls]
+Homepage = "https://honeypotter.dev"
+Repository = "https://github.com/honeypotterdev/honeypotter"
+Issues = "https://github.com/honeypotterdev/honeypotter/issues"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
