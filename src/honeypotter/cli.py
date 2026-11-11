@@ -7,7 +7,13 @@ import click
 
 from honeypotter.core import Pipeline
 from honeypotter.exporters import HttpJsonExporter
-from honeypotter.handlers import InboundIdleTimeoutHandler, IpRateLimiter, LineDecoderHandler, MessageLoggingHandler
+from honeypotter.handlers import (
+    InboundIdleTimeoutHandler,
+    IpRateLimiter,
+    LineDecoderHandler,
+    MaxSessionDurationHandler,
+    MessageLoggingHandler,
+)
 from honeypotter.mqtt.handlers import MqttHandler
 from honeypotter.mqtt.recorders import MqttRecorder
 from honeypotter.redis.handlers import RedisHandler
@@ -48,6 +54,7 @@ async def _start_server(
         pipeline_initializer(pipeline)
         pipeline.add_first("message_logging", MessageLoggingHandler())
         pipeline.add_first("inbound_idle_timeout", InboundIdleTimeoutHandler())
+        pipeline.add_first("max_session_duration", MaxSessionDurationHandler())
         pipeline.add_first("ip_rate_limiter", ip_rate_limiter.handler_factory())
 
     server = await loop.create_server(TransportProtocolFactory(initialize), host=host, port=port)

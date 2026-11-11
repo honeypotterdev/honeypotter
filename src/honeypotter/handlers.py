@@ -39,6 +39,37 @@ class InboundIdleTimeoutHandler(Handler):
         context.send_outbound(CloseConnection())
 
 
+class MaxSessionDurationHandler(Handler):
+    """Close a connection after a fixed duration, regardless of inbound or outbound activity."""
+
+    def __init__(self, max_duration: float = 600) -> None:
+        super().__init__()
+        self._max_duration = max_duration
+        self._loop = asyncio.get_event_loop()
+        self._timeout_handle: asyncio.TimerHandle | None = None
+
+    def handle_inbound(self, context: HandlerContext, event: Any) -> None:
+        match event:
+            case ConnectionOpened():
+                self._start_timeout_callback(context)
+            case ConnectionClosed():
+                self._cancel_timeout_callback()
+
+        context.send_inbound(event)
+
+    def _start_timeout_callback(self, context: HandlerContext) -> None:
+        if self._timeout_handle is None:
+            self._timeout_handle = self._loop.call_later(self._max_duration, self._timeout_callback, context)
+
+    def _cancel_timeout_callback(self) -> None:
+        if self._timeout_handle is not None:
+            self._timeout_handle.cancel()
+            self._timeout_handle = None
+
+    def _timeout_callback(self, context: HandlerContext) -> None:
+        context.send_outbound(CloseConnection())
+
+
 class MessageLoggingHandler(Handler):
     def __init__(self) -> None:
         super().__init__()
