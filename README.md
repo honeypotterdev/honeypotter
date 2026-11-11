@@ -1,13 +1,13 @@
 # HoneyPotter 🍯
 
-*The Boy Who Logged.*
+*The Boy Who Logged*
 
 [![QA](https://github.com/honeypotterdev/honeypotter/actions/workflows/qa.yml/badge.svg)](https://github.com/honeypotterdev/honeypotter/actions/workflows/qa.yml)
 [![Workflow Security](https://github.com/honeypotterdev/honeypotter/actions/workflows/workflow-security.yml/badge.svg)](https://github.com/honeypotterdev/honeypotter/actions/workflows/workflow-security.yml)
 
 An experimental Python honeypot for Telnet, Redis, MQTT, and raw TCP. It powers the deployed collectors behind [honeypotter.dev](https://honeypotter.dev).
 
-This is a **work in progress**, started for fun and learning. The protocol parsers and handler pipeline are implemented by hand to explore networking, state machines, and what happens when the internet knocks. The pipeline runs on Python's `asyncio` and takes inspiration from Java's [Netty](https://netty.io/wiki/index.html).
+This is a **work in progress**, started for fun and learning. The protocol parsers and handler pipeline are implemented by hand to explore networking, state machines, and what happens when the internet knocks. The pipeline runs on Python's `asyncio` and takes inspiration from Java's [Netty](https://netty.io/).
 
 This repository contains the honeypot component. The website's backend and frontend live separately and are planned for a future release.
 
@@ -56,7 +56,7 @@ uvx honeypotter telnet --port 2323 \
 
 Each connection has a pipeline of handlers. Inbound events move forward; outbound commands travel back toward the transport. Handlers can forward, transform, or consume events.
 
-For MQTT, raw bytes become `PublishReceived` events. The IP rate limiter can reject a connection before protocol handling begins:
+For MQTT, for example, `DataReceived` events from the transport become MQTT-level events such as `PublishReceived` and `SubscribeReceived`:
 
 ```mermaid
 sequenceDiagram
@@ -65,19 +65,16 @@ sequenceDiagram
     participant M as MqttHandler
     participant R as MqttRecorder
 
-    IO->>IP: ConnectionOpened
-    alt Rate limit exceeded
-        IP->>IO: CloseConnection
-    else Connection allowed
-        IP->>M: ConnectionOpened
-        Note over IO,R: After MQTT handshake
-        IO->>IP: DataReceived(PUBLISH bytes)
-        IP->>M: DataReceived
-        M->>R: PublishReceived(topic, message)
-    end
+    IO->>IP: DataReceived
+    IP-->>IO: CloseConnection (optional)
+    IP->>M: DataReceived
+    M->>R: PublishReceived
+    M->>R: SubscribeReceived
+    M->>IP: WriteData
+    IP->>IO: WriteData
 ```
 
-Other handlers are omitted for clarity. `MqttRecorder` is enabled when exporting.
+Other handlers are omitted for clarity. The dashed arrow shows a possible rejection on `ConnectionOpened`; the remaining arrows illustrate an accepted connection. `MqttRecorder` is enabled when exporting.
 
 ## Development
 
