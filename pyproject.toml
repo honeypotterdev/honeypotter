@@ -1,6 +1,6 @@
 [project]
 name = "honeypotter"
-version = "0.1.49"
+version = "0.1.50"
 description = "An experimental Python honeypot for Telnet, Redis, MQTT, and raw TCP"
 readme = "README.md"
 authors = [
