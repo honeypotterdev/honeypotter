@@ -12,6 +12,7 @@ from honeypotter.handlers import (
     IpRateLimiter,
     LineDecoderHandler,
     MaxSessionDurationHandler,
+    MaxSessionSizeHandler,
     MessageLoggingHandler,
 )
 from honeypotter.mqtt.handlers import MqttHandler
@@ -54,6 +55,7 @@ async def _start_server(
         pipeline_initializer(pipeline)
         pipeline.add_first("message_logging", MessageLoggingHandler())
         pipeline.add_first("inbound_idle_timeout", InboundIdleTimeoutHandler())
+        pipeline.add_first("max_session_size", MaxSessionSizeHandler())
         pipeline.add_first("max_session_duration", MaxSessionDurationHandler())
         pipeline.add_first("ip_rate_limiter", ip_rate_limiter.handler_factory())
 
