@@ -1,4 +1,4 @@
-name: Security
+name: Workflow Security
 
 on:
   pull_request:
